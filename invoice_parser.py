@@ -86,6 +86,21 @@ def read_invoice(path):
     }
 
 
+def combine_invoices(invoices, names=None):
+    """Merge several parsed invoices for one load. The same invoice uploaded twice is counted once."""
+    names = names or [None] * len(invoices)
+    seen, kept, skipped = set(), [], []
+    for inv, name in zip(invoices, names):
+        key = inv["invoice_no"] or name
+        if key in seen:
+            skipped.append(name or key)
+            continue
+        seen.add(key)
+        kept.append(dict(inv, file=name))
+    lines = [dict(l, invoice_no=inv["invoice_no"]) for inv in kept for l in inv["lines"]]
+    return {"invoices": kept, "lines": lines, "duplicates": skipped}
+
+
 def _find(pat, text):
     m = re.search(pat, text)
     return m.group(1).strip() if m else None

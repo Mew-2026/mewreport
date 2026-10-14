@@ -56,23 +56,23 @@
 <body>
 <main>
   <h1>Loading Sheet Check</h1>
-  <p class="sub">Match a handwritten loading sheet against its tax invoice.</p>
+  <p class="sub">Match a handwritten loading sheet against the tax invoices for the load. The Excel report downloads when the check finishes.</p>
 
   <form id="f">
     <div class="grid">
       <div><label for="sheet">Loading sheet photo</label><input id="sheet" name="sheet" type="file" accept="image/*" required></div>
-      <div><label for="invoice">Invoice PDF</label><input id="invoice" name="invoice" type="file" accept="application/pdf" required></div>
+      <div><label for="invoice">Invoice PDFs (one or more)</label><input id="invoice" name="invoice" type="file" accept="application/pdf" multiple required></div>
     </div>
     <button id="go" type="submit">Check</button>
     <div id="msg" class="msg"></div>
   </form>
 
   <section id="result">
-    <div class="head"><strong id="title"></strong><a id="dl" download>Download Excel</a></div>
+    <div class="head"><strong id="title"></strong><a id="dl" download>Download Excel again</a></div>
     <div class="stats" id="stats"></div>
     <div class="filters" id="filters"></div>
     <div class="table"><table><thead><tr>
-      <th>Line</th><th>Sheet model</th><th>Invoice model</th><th>Sheet</th><th>Invoice</th><th>Diff</th><th>Status</th><th>Invoice Sr.</th>
+      <th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th>Sheet</th><th>Invoice</th><th>Diff</th><th>Reason</th><th>Invoice Sr.</th>
     </tr></thead><tbody id="rows"></tbody></table></div>
     <p class="note">Blue model cells: fuzzy pairing below 90% — check by eye. Compare the sheet total with the total written on the paper.</p>
   </section>
@@ -80,43 +80,77 @@
 <script>
 const $ = id => document.getElementById(id);
 let data = null, filter = "ALL";
+const say = (t, err) => { $("msg").className = err ? "msg err" : "msg"; $("msg").textContent = t; };
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", body });
+  const j = await r.json().catch(() => ({ error: r.status === 413 ? "File too large to upload" : `Server error (${r.status})` }));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+// Uploads are capped (~4.5 MB): shrink big photos; renamed.to reads ~1300px pages fine.
+async function shrink(file, maxSide = 1800) {
+  const img = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+  if (k === 1 && file.size < 3e6) return file;
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.9));
+  return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+}
+
+function download() {
+  const bytes = Uint8Array.from(atob(data.xlsx), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  $("dl").href = url; $("dl").download = data.filename;
+  $("dl").click();
+}
 
 $("f").addEventListener("submit", async e => {
   e.preventDefault();
-  $("go").disabled = true; $("msg").className = "msg";
-  $("msg").textContent = "Reading the sheet with renamed.to — this takes about a minute…";
+  $("go").disabled = true;
   try {
-    const r = await fetch("/api/reconcile", { method: "POST", body: new FormData(e.target) });
-    const j = await r.json().catch(() => ({ error: `Server error (${r.status})` }));
-    if (!r.ok) throw new Error(j.error || r.status);
-    data = j; filter = "ALL"; render();
-    $("msg").textContent = "";
+    const files = [...$("invoice").files];
+    const invoices = [];
+    for (const [i, f] of files.entries()) {
+      say(`Reading invoice ${i + 1} of ${files.length}: ${f.name}…`);
+      const fd = new FormData(); fd.append("invoice", f);
+      invoices.push(await post("/api/invoice", fd));
+    }
+    say("Reading the loading sheet with renamed.to — about half a minute…");
+    const fd = new FormData();
+    fd.append("sheet", await shrink($("sheet").files[0]));
+    fd.append("invoices", JSON.stringify(invoices));
+    data = await post("/api/reconcile", fd); filter = "ALL";
+    render(); download();
+    say(data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}` : "");
   } catch (err) {
-    $("msg").className = "msg err"; $("msg").textContent = err.message;
+    say(err.message, true);
   } finally { $("go").disabled = false; }
 });
 
 function render() {
-  const d = data, count = s => d.rows.filter(r => r.status === s).length;
-  $("title").textContent = `Invoice ${d.invoice_no} · ${d.date} · ${d.recipient}`;
-  const bytes = Uint8Array.from(atob(d.xlsx), c => c.charCodeAt(0));
-  $("dl").href = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-  $("dl").download = d.filename;
+  const d = data, count = s => d.rows.filter(r => r.result === s).length;
+  $("title").textContent = d.invoices.map(i => `${i.invoice_no} (${i.date})`).join(" + ") + ` · ${d.invoices[0].recipient}`;
   const stats = [
-    [d.sheet_total, "Loading sheet pcs"], [d.invoice_total, "Invoice pcs"],
-    [d.invoice_total - d.sheet_total, "Difference"], [count("OK"), "Models OK"],
-    [count("QTY MISMATCH"), "Qty mismatch"], [count("NOT IN INVOICE") + count("NOT IN SHEET"), "Missing on one side"],
+    [d.sheet_total, "Loading sheet pcs"], [d.invoice_total, `Invoice pcs (${d.invoices.length} invoice${d.invoices.length > 1 ? "s" : ""})`],
+    [d.invoice_total - d.sheet_total, "Difference"], [count("CORRECT"), "Correct"], [count("INCORRECT"), "Incorrect"],
   ];
   $("stats").innerHTML = stats.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
-  const opts = ["ALL", "QTY MISMATCH", "NOT IN INVOICE", "NOT IN SHEET", "OK"];
+  const opts = ["ALL", "INCORRECT", "CORRECT"];
   $("filters").innerHTML = opts.map(o => `<button type="button" class="${o === filter ? "on" : ""}" data-f="${o}">${o === "ALL" ? "All" : o[0] + o.slice(1).toLowerCase()} (${o === "ALL" ? d.rows.length : count(o)})</button>`).join("");
   $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(); });
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  $("rows").innerHTML = d.rows.filter(r => filter === "ALL" || r.status === filter).map(r => `
+  const rows = d.rows.filter(r => filter === "ALL" || r.result === filter)
+    .sort((a, b) => (a.result === "CORRECT") - (b.result === "CORRECT"));
+  $("rows").innerHTML = rows.map(r => `
     <tr class="${r.check ? "check" : ""}">
+      <td><span class="pill ${r.result === "CORRECT" ? "OK" : "QTY"}">${r.result}</span></td>
       <td>${esc(r.line)}</td><td class="m">${esc(r.sheet_model)}</td><td class="m">${esc(r.invoice_model)}</td>
       <td class="n">${r.sheet_qty}</td><td class="n">${r.invoice_qty}</td><td class="n">${r.diff > 0 ? "+" : ""}${r.diff}</td>
-      <td><span class="pill ${r.status.split(" ")[0]}">${esc(r.status)}</span></td><td>${esc(r.invoice_lines)}</td>
+      <td>${esc(r.status.toLowerCase())}</td><td>${esc(r.invoice_lines)}</td>
     </tr>`).join("");
   $("result").style.display = "block";
 }

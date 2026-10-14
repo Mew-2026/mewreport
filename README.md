@@ -26,7 +26,7 @@ RENAMED_API_KEY=rt_...
 ## Run
 
 ```bash
-python reconcile.py --sheet loading_sheet.jpg --invoice 5260118338.PDF --out reports/report.xlsx
+python reconcile.py --sheet loading_sheet.jpg --invoice 5260118338.PDF 5260118339.PDF --out reports/report.xlsx
 ```
 
 The OCR result is saved next to the photo as `<name>.ocr.json`. To rebuild the report without
@@ -41,7 +41,12 @@ renamed.to credits.
 
 Run it locally with `python -m flask --app api/index.py run`.
 
+A load can have several invoices: pass them all after `--invoice`. Their lines are added up
+before matching; the same invoice given twice is counted once.
+
 ## Report
+
+Every row is marked **CORRECT** (green) or **INCORRECT** (red), incorrect rows first, with the reason:
 
 | Status | Meaning |
 |---|---|
