@@ -25,7 +25,7 @@
   form, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
   label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-  input[type=file], input[type=password] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  input[type=file] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
   button { margin-top: 16px; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .6; cursor: wait; }
   .msg { margin-top: 14px; color: var(--muted); }
@@ -62,7 +62,6 @@
     <div class="grid">
       <div><label for="sheet">Loading sheet photo</label><input id="sheet" name="sheet" type="file" accept="image/*" required></div>
       <div><label for="invoice">Invoice PDF</label><input id="invoice" name="invoice" type="file" accept="application/pdf" required></div>
-      <div><label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>
     </div>
     <button id="go" type="submit">Check</button>
     <div id="msg" class="msg"></div>

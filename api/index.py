@@ -1,6 +1,5 @@
 """Vercel entry point: upload a loading sheet photo + invoice PDF, get the reconciliation back."""
 import base64
-import hmac
 import io
 import os
 import sys
@@ -17,12 +16,6 @@ from reconcile import reconcile, write_report  # noqa: E402
 app = Flask(__name__)
 
 
-def authorized(given):
-    expected = os.environ.get("APP_PASSWORD")
-    # fail closed: without a password configured the app refuses to spend credits
-    return bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
-
-
 @app.get("/")
 def index():
     return send_from_directory(os.path.join(ROOT, "public"), "index.html")
@@ -30,8 +23,6 @@ def index():
 
 @app.post("/api/reconcile")
 def run():
-    if not authorized(request.form.get("password", "")):
-        return jsonify(error="Wrong password"), 401
     sheet_file, invoice_file = request.files.get("sheet"), request.files.get("invoice")
     if not sheet_file or not invoice_file:
         return jsonify(error="Upload both the loading sheet photo and the invoice PDF"), 400

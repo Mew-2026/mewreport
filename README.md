@@ -35,12 +35,11 @@ spending credits again, pass `--sheet-json <name>.ocr.json` instead of `--sheet`
 ## Web app (Vercel)
 
 `public/index.html` is an upload page; `api/index.py` (Flask) runs the same check and returns the
-summary plus the Excel file. Set two environment variables in Vercel:
+summary plus the Excel file. Set `RENAMED_API_KEY` (the renamed.to token) as an environment
+variable in Vercel. The page has no password: anyone with the link can run checks and spend
+renamed.to credits.
 
-- `RENAMED_API_KEY`: the renamed.to token
-- `APP_PASSWORD`: the password people type on the page (the app refuses every request if unset)
-
-Run it locally with `APP_PASSWORD=... python -m flask --app api/index.py run`.
+Run it locally with `python -m flask --app api/index.py run`.
 
 ## Report
 
