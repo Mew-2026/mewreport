@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+# business data: invoices, sheets and reports stay local
+reports/
+*.pdf
+*.PDF
+*.jpg
+*.jpeg
+*.png
+*.xlsx
+*.ocr.json
