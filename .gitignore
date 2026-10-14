@@ -11,3 +11,6 @@ reports/
 *.xlsx
 *.ocr.json
 .vercel
+
+.vercel
+.env*
