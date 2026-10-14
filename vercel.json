@@ -2,8 +2,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 300,
-      "excludeFiles": "{reports/**,.env,**/*.xlsx,**/*.pdf,**/*.PDF,**/*.jpg,**/*.jpeg,**/*.png}"
+      "excludeFiles": "{reports/**,.env,.env.*,**/*.xlsx,**/*.pdf,**/*.PDF,**/*.jpg,**/*.jpeg,**/*.png}"
     }
-  },
-  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/index" }]
+  }
 }
