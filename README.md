@@ -44,6 +44,18 @@ Run it locally with `python -m flask --app api/index.py run`.
 A load can have several invoices: pass them all after `--invoice`. Their lines are added up
 before matching; the same invoice given twice is counted once.
 
+## Demo invoices
+
+`demo/` holds DEMO invoices (made-up supplier, recipient and invoice numbers, watermarked) in the
+same layout as the real invoice, built from the 13/10/26 loading sheet:
+
+- `match_1_*.pdf` + `match_2_*.pdf`: together match the sheet exactly (440 pcs) -> all CORRECT
+- `mismatch_1_*.pdf` + `mismatch_2_*.pdf`: three planted errors (SC16060 billed 38 not 40,
+  RC18000P not billed, crossed-out PC20042TT billed) -> 3 INCORRECT
+
+Regenerate with `python demo/make_demo_invoices.py`. Invoices are read from the PDF text layer
+(`pypdf`), never through renamed.to, so they cost no credits; only the handwritten sheet does.
+
 ## Report
 
 Every row is marked **CORRECT** (green) or **INCORRECT** (red), incorrect rows first, with the reason:
