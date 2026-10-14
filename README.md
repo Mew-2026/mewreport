@@ -32,6 +32,16 @@ python reconcile.py --sheet loading_sheet.jpg --invoice 5260118338.PDF --out rep
 The OCR result is saved next to the photo as `<name>.ocr.json`. To rebuild the report without
 spending credits again, pass `--sheet-json <name>.ocr.json` instead of `--sheet`.
 
+## Web app (Vercel)
+
+`public/index.html` is an upload page; `api/index.py` (Flask) runs the same check and returns the
+summary plus the Excel file. Set two environment variables in Vercel:
+
+- `RENAMED_API_KEY`: the renamed.to token
+- `APP_PASSWORD`: the password people type on the page (the app refuses every request if unset)
+
+Run it locally with `APP_PASSWORD=... python -m flask --app api/index.py run`.
+
 ## Report
 
 | Status | Meaning |

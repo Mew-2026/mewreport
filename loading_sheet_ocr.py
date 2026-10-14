@@ -2,18 +2,20 @@
 
 renamed.to only returns a filename, so each strip is small enough that its
 rows fit in one filename. Rows come back as "N.MODEL-QTY"; overlapping strips
-are merged by row number.
+are merged by lining up their model/qty sequences (the handwritten row numbers
+are not reliable: rows get struck out or renumbered).
 
 Usage: python loading_sheet_ocr.py <image> [out.json]
 """
+import io
 import json
 import os
 import re
 import sys
-import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
-import cv2
 import requests
+from PIL import Image, ImageOps
 from rapidfuzz import fuzz
 
 API = "https://www.renamed.to/api/v1/rename"
@@ -33,7 +35,9 @@ QTY_END = re.compile(r"[-\s_]+(\d{1,4})\W*$")       # trailing "-7" is the quant
 
 
 def count_rows(name):
-    return len(ROW_START.findall(os.path.splitext(name)[0]))
+    """Rows the reply claims to have, not counting qty-0 rows (crossed out on the sheet)."""
+    stem = os.path.splitext(name)[0]
+    return len(ROW_START.findall(stem)) - len(re.findall(r"[-_\s]0(?=_|\W*$)", stem))
 
 
 def parse_rows(name):
@@ -48,8 +52,10 @@ def parse_rows(name):
             continue  # model without a quantity: unusable
         model = re.sub(r"[^A-Za-z0-9]", "", chunk[: q.start()]).upper()
         row = (int(m.group(1)), model, int(q.group(1)))
+        if row[2] == 0 or not re.search(r"\d", model) or not re.search(r"[A-Z]{2}", model):
+            continue  # junk (e.g. a date like "2017-0") or a struck-out row with qty 0
         # renamed.to sometimes writes a row twice in a row; drop the repeat
-        if model and not (rows and rows[-1][1:] == row[1:]):
+        if not (rows and rows[-1][1:] == row[1:]):
             rows.append(row)
     return rows
 
@@ -62,13 +68,15 @@ def load_key():
             if line.startswith("RENAMED_API_KEY="):
                 key = line.split("=", 1)[1].strip()
     if not key:
-        sys.exit("RENAMED_API_KEY not set (put it in .env)")
+        raise RuntimeError("RENAMED_API_KEY not set (put it in .env)")
     return key
 
 
-def strips(img):
-    """Yield crops of the page: left column and right column, cut into overlapping strips."""
-    h, w = img.shape[:2]
+def strips(w, h):
+    """Crop boxes for the page: left column and right column, cut into overlapping strips.
+
+    Each strip comes with a second box shifted down a third, used when the first gets no usable reply.
+    """
     # Column layout measured on a 879x1280 sheet; scale to the actual image.
     sx, sy = w / 879, h / 1280
     columns = [(0, 350, 75, 1240), (330, 879, 85, 380)]
@@ -77,25 +85,41 @@ def strips(img):
         step, sh = int((STRIP_H - OVERLAP) * sy), int(STRIP_H * sy)
         y = y0
         while y < y1:
-            # second crop is the same strip shifted down a third, used when the first comes back empty
-            shifted = img[min(y + sh // 3, y1 - 1):min(y + sh + sh // 3, y1), x0:x1]
-            yield col, img[y:min(y + sh, y1), x0:x1], shifted
+            box = (x0, y, x1, min(y + sh, y1))
+            shifted = (x0, min(y + sh // 3, y1 - 1), x1, min(y + sh + sh // 3, y1))
+            yield col, box, shifted
             if y + sh >= y1:
                 break
             y += step
 
 
-def rename(key, path):
-    with open(path, "rb") as f:
-        r = requests.post(
-            API,
-            headers={"Authorization": f"Bearer {key}"},
-            files={"file": (os.path.basename(path), f, "image/jpeg")},
-            data={"strategy": "follow_custom_prompt", "templateMode": "custom", "customTemplate": PROMPT},
-            timeout=180,
-        )
+def rename(key, img):
+    buf = io.BytesIO()
+    img.resize((img.width * 2, img.height * 2), Image.BICUBIC).save(buf, "JPEG", quality=92)
+    r = requests.post(
+        API,
+        headers={"Authorization": f"Bearer {key}"},
+        files={"file": ("strip.jpg", buf.getvalue(), "image/jpeg")},
+        data={"strategy": "follow_custom_prompt", "templateMode": "custom", "customTemplate": PROMPT},
+        timeout=120,
+    )
     r.raise_for_status()
     return r.json().get("suggestedFilename", "")
+
+
+def read_strip(key, img, box, shifted, log):
+    """Replies vary call to call: sometimes empty, sometimes rows without a quantity.
+    Retry until every row in the reply parses; keep the reply with the most rows."""
+    best_name, best = "", []
+    for b in (box, box, box, shifted):
+        name = rename(key, img.crop(b))
+        log(name)
+        found = parse_rows(name)
+        if len(found) > len(best):
+            best_name, best = name, found
+        if found and len(found) == count_rows(name):
+            break
+    return best_name, best
 
 
 def same_model(a, b):
@@ -141,29 +165,17 @@ def merge(seq, new):
     return seq + new
 
 
-def read_sheet(image_path):
+def read_sheet(image, log=lambda msg: print(msg, file=sys.stderr)):
+    """image: a file path, bytes, or file object. Strips are sent to renamed.to in parallel."""
     key = load_key()
-    img = cv2.imread(image_path)
-    if img is None:
-        sys.exit(f"cannot read image {image_path}")
-    strip_rows = []
-    with tempfile.TemporaryDirectory() as tmp:
-        p = os.path.join(tmp, "strip.jpg")
-        for i, (col, crop, shifted) in enumerate(strips(img)):
-            # Replies vary call to call: sometimes empty, sometimes rows without a quantity.
-            # Retry until every row in the reply parses; keep the reply with the most rows.
-            best_name, best = "", []
-            for part in (crop, crop, crop, shifted):
-                cv2.imwrite(p, cv2.resize(part, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC))
-                name = rename(key, p)
-                print(f"strip {i}: {name}", file=sys.stderr)
-                found = parse_rows(name)
-                if len(found) > len(best):
-                    best_name, best = name, found
-                if found and len(found) == count_rows(name):
-                    break
-            strip_rows.append({"column": col, "filename": best_name, "rows": best})
-    return build(strip_rows)
+    if isinstance(image, bytes):
+        image = io.BytesIO(image)
+    img = ImageOps.exif_transpose(Image.open(image)).convert("RGB")
+    jobs = list(strips(img.width, img.height))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda j: read_strip(key, img, j[1], j[2], log), jobs))
+    return build([{"column": col, "filename": name, "rows": rows}
+                  for (col, _, _), (name, rows) in zip(jobs, results)])
 
 
 def build(strip_rows):

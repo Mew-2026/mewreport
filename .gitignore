@@ -10,3 +10,4 @@ reports/
 *.png
 *.xlsx
 *.ocr.json
+.vercel

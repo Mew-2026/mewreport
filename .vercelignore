@@ -1,0 +1,11 @@
+.env
+.env.*
+reports/
+*.pdf
+*.PDF
+*.jpg
+*.jpeg
+*.png
+*.xlsx
+*.ocr.json
+__pycache__/

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loading Sheet Check</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6676; --line: #dde1e8;
+    --accent: #1f5fbf; --ok: #1e7b3c; --ok-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fde8e6;
+    --warn: #8a5a00; --warn-bg: #fff3d6; --check-bg: #e2ecfa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b2029; --text: #e7eaf0; --muted: #9aa3b2; --line: #2d3440;
+      --accent: #6ea2f0; --ok: #7fd49a; --ok-bg: #1b3324; --bad: #f19a90; --bad-bg: #3c1f1c;
+      --warn: #f0c46a; --warn-bg: #3a2f14; --check-bg: #1f2d44;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  form, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  input[type=file], input[type=password] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  button { margin-top: 16px; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: wait; }
+  .msg { margin-top: 14px; color: var(--muted); }
+  .msg.err { color: var(--bad); }
+  #result { margin-top: 20px; display: none; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .head a { background: var(--accent); color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters button { margin: 0; padding: 5px 10px; background: var(--card); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  .filters button.on { border-color: var(--accent); color: var(--accent); }
+  .table { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .pill { padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+  .OK { background: var(--ok-bg); color: var(--ok); }
+  .QTY { background: var(--bad-bg); color: var(--bad); }
+  .NOT { background: var(--warn-bg); color: var(--warn); }
+  tr.check td.m { background: var(--check-bg); }
+  .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Loading Sheet Check</h1>
+  <p class="sub">Match a handwritten loading sheet against its tax invoice.</p>
+
+  <form id="f">
+    <div class="grid">
+      <div><label for="sheet">Loading sheet photo</label><input id="sheet" name="sheet" type="file" accept="image/*" required></div>
+      <div><label for="invoice">Invoice PDF</label><input id="invoice" name="invoice" type="file" accept="application/pdf" required></div>
+      <div><label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>
+    </div>
+    <button id="go" type="submit">Check</button>
+    <div id="msg" class="msg"></div>
+  </form>
+
+  <section id="result">
+    <div class="head"><strong id="title"></strong><a id="dl" download>Download Excel</a></div>
+    <div class="stats" id="stats"></div>
+    <div class="filters" id="filters"></div>
+    <div class="table"><table><thead><tr>
+      <th>Line</th><th>Sheet model</th><th>Invoice model</th><th>Sheet</th><th>Invoice</th><th>Diff</th><th>Status</th><th>Invoice Sr.</th>
+    </tr></thead><tbody id="rows"></tbody></table></div>
+    <p class="note">Blue model cells: fuzzy pairing below 90% — check by eye. Compare the sheet total with the total written on the paper.</p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let data = null, filter = "ALL";
+
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("go").disabled = true; $("msg").className = "msg";
+  $("msg").textContent = "Reading the sheet with renamed.to — this takes about a minute…";
+  try {
+    const r = await fetch("/api/reconcile", { method: "POST", body: new FormData(e.target) });
+    const j = await r.json().catch(() => ({ error: `Server error (${r.status})` }));
+    if (!r.ok) throw new Error(j.error || r.status);
+    data = j; filter = "ALL"; render();
+    $("msg").textContent = "";
+  } catch (err) {
+    $("msg").className = "msg err"; $("msg").textContent = err.message;
+  } finally { $("go").disabled = false; }
+});
+
+function render() {
+  const d = data, count = s => d.rows.filter(r => r.status === s).length;
+  $("title").textContent = `Invoice ${d.invoice_no} · ${d.date} · ${d.recipient}`;
+  const bytes = Uint8Array.from(atob(d.xlsx), c => c.charCodeAt(0));
+  $("dl").href = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  $("dl").download = d.filename;
+  const stats = [
+    [d.sheet_total, "Loading sheet pcs"], [d.invoice_total, "Invoice pcs"],
+    [d.invoice_total - d.sheet_total, "Difference"], [count("OK"), "Models OK"],
+    [count("QTY MISMATCH"), "Qty mismatch"], [count("NOT IN INVOICE") + count("NOT IN SHEET"), "Missing on one side"],
+  ];
+  $("stats").innerHTML = stats.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  const opts = ["ALL", "QTY MISMATCH", "NOT IN INVOICE", "NOT IN SHEET", "OK"];
+  $("filters").innerHTML = opts.map(o => `<button type="button" class="${o === filter ? "on" : ""}" data-f="${o}">${o === "ALL" ? "All" : o[0] + o.slice(1).toLowerCase()} (${o === "ALL" ? d.rows.length : count(o)})</button>`).join("");
+  $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(); });
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  $("rows").innerHTML = d.rows.filter(r => filter === "ALL" || r.status === filter).map(r => `
+    <tr class="${r.check ? "check" : ""}">
+      <td>${esc(r.line)}</td><td class="m">${esc(r.sheet_model)}</td><td class="m">${esc(r.invoice_model)}</td>
+      <td class="n">${r.sheet_qty}</td><td class="n">${r.invoice_qty}</td><td class="n">${r.diff > 0 ? "+" : ""}${r.diff}</td>
+      <td><span class="pill ${r.status.split(" ")[0]}">${esc(r.status)}</span></td><td>${esc(r.invoice_lines)}</td>
+    </tr>`).join("");
+  $("result").style.display = "block";
+}
+</script>
+</body>
+</html>

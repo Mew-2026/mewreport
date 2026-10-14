@@ -1,5 +1,6 @@
+flask
 requests
-opencv-python
+pillow
 rapidfuzz
 openpyxl
 pypdf
