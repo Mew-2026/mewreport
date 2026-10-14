@@ -14,7 +14,16 @@ and produces an Excel reconciliation report.
 3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
    tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
 
-## Setup
+## Run on your computer (Windows)
+
+1. Install Python 3.10+ from python.org (tick "Add python.exe to PATH").
+2. Double-click `run_app.bat`. The first time it creates `.env` and opens it in Notepad: paste
+   your renamed.to API key after `RENAMED_API_KEY=`, save, and double-click `run_app.bat` again.
+3. The app opens at http://127.0.0.1:5000. Choose the loading sheet photo and the invoice PDFs.
+
+Try it with `samples/loading_sheet_13-10-26.jpg` and the PDFs in `demo/`.
+
+## Setup (any OS)
 
 ```bash
 python -m pip install -r requirements.txt
