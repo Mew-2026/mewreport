@@ -7,7 +7,10 @@ and produces an Excel reconciliation report.
    only returns a filename, so the photo is cut into small overlapping strips and each strip is
    asked to write its rows into the filename as `ROW.MODEL-QTY_...`. The strips are then stitched
    back together (`loading_sheet_ocr.py`). One sheet costs roughly 11–15 credits.
-2. **Invoice** (PDF) is read from its text layer, first copy only (`invoice_parser.py`).
+2. **Invoices** (system-generated PDFs) are read from their text layer by position: the table's
+   column lines and header labels locate each cell, so the result does not depend on how the
+   PDF stores its text. First copy only; pcs read are checked against the printed total
+   (`invoice_parser.py`).
 3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
    tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
 
@@ -46,15 +49,16 @@ before matching; the same invoice given twice is counted once.
 
 ## Demo invoices
 
-`demo/` holds DEMO invoices (made-up supplier, recipient and invoice numbers, watermarked) in the
-same layout as the real invoice, built from the 13/10/26 loading sheet:
+`demo/` holds DEMO invoices in the exact layout of the real invoice (grid, columns, fonts and
+positions measured from it, drawn by `demo/invoice_layout.py`), with made-up supplier, recipient,
+GSTINs, IRN and invoice numbers and a DEMO watermark. They are built from the 13/10/26 loading sheet:
 
 - `match_1_*.pdf` + `match_2_*.pdf`: together match the sheet exactly (440 pcs) -> all CORRECT
 - `mismatch_1_*.pdf` + `mismatch_2_*.pdf`: three planted errors (SC16060 billed 38 not 40,
   RC18000P not billed, crossed-out PC20042TT billed) -> 3 INCORRECT
 
-Regenerate with `python demo/make_demo_invoices.py`. Invoices are read from the PDF text layer
-(`pypdf`), never through renamed.to, so they cost no credits; only the handwritten sheet does.
+Regenerate with `python demo/make_demo_invoices.py` (needs `reportlab`, see
+`requirements-dev.txt`). Invoices are read from the PDF text layer (`pdfplumber`), never through renamed.to, so they cost no credits; only the handwritten sheet does.
 
 ## Report
 

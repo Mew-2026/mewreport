@@ -3,4 +3,4 @@ requests
 pillow
 rapidfuzz
 openpyxl
-pypdf
+pdfplumber

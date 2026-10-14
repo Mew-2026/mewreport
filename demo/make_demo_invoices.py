@@ -6,15 +6,13 @@ and every page carries a DEMO watermark: these are test files, not tax documents
 
 Two sets are written to demo/:
   match_*.pdf     two invoices that together match the loading sheet exactly
-  mismatch_*.pdf  the same load with three deliberate errors (see MISMATCH below)
+  mismatch_*.pdf  the same load with three deliberate errors (see mismatch() below)
 
 Usage: python demo/make_demo_invoices.py
 """
 import os
-import textwrap
 
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from invoice_layout import write_invoice
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 
@@ -103,25 +101,22 @@ def mismatch(inv1, inv2):
     return inv1, inv2 + [("PC20042TT", 1)]
 
 
-SUPPLIER = [
-    "DEMO BATTERY WORKS PVT. LTD. (SPECIMEN)",
-    "Plot 1, Demo Industrial Estate",
-    "Patiala-140417 INDIA",
-    "GSTIN State with Code: 03 - Punjab",
-    "Ph No.: 0000000000",
-]
-RECIPIENT = [
-    "DEMO RECYCLERS (SPECIMEN)",
-    "Plot 2, Demo Industrial Area,",
-    "MUZAFFARPUR - 842005,",
-    "GSTIN STATE WITH CODE: BIHAR - 10",
-]
-ITEMS_PER_PAGE = 8
-COPIES = ["ORIGINAL FOR RECIPIENT", "DUPLICATE FOR TRANSPORTER"]
-
-
-def money(x):
-    return f"{x:,.2f}"
+SUPPLIER = {
+    "name": "DEMO BATTERY WORKS PVT. LTD. (SPECIMEN)",
+    "address": ["Plot 1, Demo Industrial Estate, Village Demo", "Patiala,Patiala-140417 INDIA"],
+    "state": "GSTIN State with Code: 03 - Punjab",
+    "phone": "0000000000",
+    "pan": "DEMO00000X",
+    "gstin": "03DEMO0000X0ZZ",
+}
+RECIPIENT = {
+    "name": "DEMO RECYCLERS (SPECIMEN)",
+    "address": ["PLOT 2, DEMO INDUSTRIAL AREA,", "MUZAFFARPUR,MUZAFFARPUR - 842005,"],
+    "phone": "0000000000",
+    "pan": "DEMO11111Y",
+    "state": "BIHAR - 10",
+    "gstin": "10DEMO1111Y1Z9",
+}
 
 
 def lines_for(items):
@@ -135,134 +130,20 @@ def lines_for(items):
     return out
 
 
-def draw_page(c, inv, page_lines, page_no, pages, copy, total_line):
-    w, h = A4
-    # watermark
-    c.saveState()
-    c.setFillGray(0.88)
-    c.setFont("Helvetica-Bold", 70)
-    c.translate(w / 2, h / 2)
-    c.rotate(35)
-    c.drawCentredString(0, 0, "DEMO")
-    c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(0, -40, "NOT A VALID TAX INVOICE")
-    c.restoreState()
-
-    y = h - 36
-    c.setFont("Helvetica-Bold", 13)
-    c.drawCentredString(w / 2, y, " TAX INVOICE")
-    c.setFont("Helvetica", 7)
-    c.drawRightString(w - 30, y, copy)
-
-    c.setFont("Helvetica", 7.5)
-    y -= 18
-    header = [
-        f"Mode of Transport: Road Veh.No.: {inv['vehicle']}",
-        "Name of Transporter:",
-        "GR No.: GR Date: ",
-        "Insurance Policy No.: ",
-        "Way bill/Road permit No.:",
-        f"Challan/other doc.ref.No.: {inv['challan']}",
-        f"Order No.: {inv['order']} ",
-        "Incoterms: EXW - Ex Works",
-        "Payment Terms: Immediate",
-        "PO No.: Scrap Order PO Date:Name, Address & GSTIN No of Recipient:",
-    ]
-    for t in header:
-        c.drawString(30, y, t)
-        y -= 9.5
-    for t in RECIPIENT:
-        c.drawString(30, y, t)
-        y -= 9.5
-
-    # table header; the last header cell must read "Net Amount" (the parser keys on it)
-    y -= 6
-    c.line(30, y + 8, w - 30, y + 8)
-    c.setFont("Helvetica-Bold", 7)
-    c.drawString(30, y, "Sr")
-    c.drawString(30, y - 8, "No")
-    c.drawString(52, y, "Item Code Description & Specification of")
-    c.drawString(52, y - 8, "Goods & Replacement Note No")
-    c.drawString(200, y - 16, "HSN Qty UOM Rate(Rs) Discount")
-    c.drawString(330, y - 16, "(Rs)")
-    c.drawString(360, y - 16, "Taxable")
-    c.drawString(360, y - 24, "Value")
-    c.drawString(360, y - 32, "(Rs)")
-    c.drawString(400, y - 32, "Rate")
-    c.drawString(400, y - 40, "(%)")
-    c.drawString(430, y - 40, "CGST Amt SGST Amt IGST Amt Net Amount")
-    y -= 50
-    c.line(30, y + 6, w - 30, y + 6)
-
-    c.setFont("Helvetica", 7.5)
-    for l in page_lines:
-        y -= 4
-        c.drawString(30, y, f"{l['sr']} {l['code']} /")
-        c.drawString(52, y - 9, "S.Loc / SC01")
-        desc = textwrap.wrap(l["desc"], 26)
-        for k, t in enumerate(desc):
-            c.drawString(52, y - 18 - 9 * k, t)
-        y -= 18 + 9 * len(desc)
-        # one string so text extraction keeps the column order of the real invoice
-        c.drawString(52, y, f"85491100                {l['qty']} NOS {money(l['rate'])} {money(l['taxable'])} "
-                            f"18.00 0.00 0.00 {money(l['igst'])} {money(l['net'])} ")
-        y -= 12
-
-    if total_line:
-        y -= 4
-        c.line(30, y + 10, w - 30, y + 10)
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawString(30, y, total_line)
-        y -= 14
-
-    c.setFont("Helvetica", 6.8)
-    footer = [
-        "Certified that the particulars given above are true & correct And the",
-        "amount indicated represents the price actually charged and that",
-        "there is no additional flow directly or indirectly from the buyer",
-        "Goods Dispatched From: DEMO BATTERY WORKS PVT. LTD. (SPECIMEN)",
-        "Remarks: DEMO DOCUMENT FOR SOFTWARE TESTING ONLY",
-        "Whether the tax is payable on reverse charge basis: NO",
-        "Name, Address & GSTIN of Supplier:",
-        *SUPPLIER,
-        f"Inv. No.: {inv['no']}",
-        f"Issue Date: {inv['date']}",
-        f"Page No.: {page_no} of {pages}",
-    ]
-    fy = 150
-    for t in footer:
-        c.drawString(30, fy, t)
-        fy -= 8.5
-    c.showPage()
-
-
-def write_invoice(path, inv):
-    lines = lines_for(inv["items"])
-    pages = [lines[i:i + ITEMS_PER_PAGE] for i in range(0, len(lines), ITEMS_PER_PAGE)]
-    qty = sum(l["qty"] for l in lines)
-    total = (f"Total             {qty} 0.00 {money(sum(l['taxable'] for l in lines))} 0.00 0.00 "
-             f"{money(sum(l['igst'] for l in lines))} {money(sum(l['net'] for l in lines))} ")
-    c = canvas.Canvas(path, pagesize=A4)
-    c.setTitle(f"DEMO invoice {inv['no']}")
-    for copy in COPIES:
-        for i, page in enumerate(pages, 1):
-            draw_page(c, inv, page, i, len(pages), copy, total if i == len(pages) else None)
-    c.save()
-    return qty
-
-
 def main():
-    base = {"date": "13.10.2026", "vehicle": "DEMO-0000", "order": "DEMO-ORDER"}
     match1, match2 = split_load(SHEET)
-    sets = {
-        "match": (match1, match2),
-        "mismatch": mismatch(match1, match2),
-    }
+    sets = {"match": (match1, match2), "mismatch": mismatch(match1, match2)}
     n = 1
     for name, invoices in sets.items():
         for k, items in enumerate(invoices, 1):
             no = f"9000000000{n:02d}"  # all digits like real invoice numbers; 9000... is not a real series
-            inv = dict(base, no=no, challan=f"DEMO/{no}", items=items)
+            inv = {
+                "no": no, "date": "13.10.2026", "irn": "DEMO-DOCUMENT-NOT-REGISTERED-ON-IRP",
+                "irn_date": "13/10/2026 04:34:00 PM", "order": f"90000{n:02d}", "challan": f"90000000/{no}",
+                "vehicle": "DEMO-0000", "qr": f"DEMO INVOICE {no} - NOT A VALID TAX INVOICE",
+                "supplier": SUPPLIER, "recipient": RECIPIENT, "watermark": ("DEMO", "NOT A VALID TAX INVOICE"),
+                "lines": lines_for(items),
+            }
             path = os.path.join(OUT, f"{name}_{k}_{no}.pdf")
             qty = write_invoice(path, inv)
             print(f"{os.path.basename(path)}: {len(items)} lines, {qty} pcs")

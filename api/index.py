@@ -62,7 +62,8 @@ def run():
         return jsonify(error=f"{type(e).__name__}: {e}"), 500
 
     return jsonify(
-        invoices=[{k: i[k] for k in ("invoice_no", "date", "recipient", "file")} for i in inv["invoices"]],
+        invoices=[{k: i.get(k) for k in ("invoice_no", "date", "recipient", "file", "printed_total_qty")}
+                  for i in inv["invoices"]],
         duplicates=inv["duplicates"],
         sheet_total=sheet["total"],
         invoice_total=sum(l["qty"] for l in inv["lines"]),

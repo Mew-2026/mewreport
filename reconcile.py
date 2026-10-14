@@ -125,12 +125,16 @@ def write_report(path, rows, sheet, inv):
             c.font = BOLD
     ws["B2"].font = RESULT_FONT["CORRECT" if all_ok else "INCORRECT"]
     ws.append([])
-    ws.append(["Invoice no", "Date", "Recipient", "Lines", "Pcs", "File"])
+    ws.append(["Invoice no", "Date", "Recipient", "Lines", "Pcs read", "Printed total", "Read check", "File"])
     for c in ws[ws.max_row]:
         c.font = BOLD
     for i in inv["invoices"]:
-        ws.append([i["invoice_no"], i["date"], i["recipient"], len(i["lines"]),
-                   sum(l["qty"] for l in i["lines"]), i.get("file") or ""])
+        read = sum(l["qty"] for l in i["lines"])
+        printed = i.get("printed_total_qty")
+        ok = printed is not None and printed == read
+        ws.append([i["invoice_no"], i["date"], i["recipient"], len(i["lines"]), read, printed,
+                   "OK" if ok else "CHECK: pcs read differ from printed total", i.get("file") or ""])
+        ws.cell(ws.max_row, 7).font = RESULT_FONT["CORRECT" if ok else "INCORRECT"]
     for d in inv.get("duplicates", []):
         ws.append([f"Skipped duplicate upload: {d}"])
     ws.append([])
