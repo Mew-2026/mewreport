@@ -4,3 +4,4 @@ pillow
 rapidfuzz
 openpyxl
 pdfplumber
+reportlab

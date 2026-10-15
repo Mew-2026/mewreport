@@ -25,7 +25,7 @@
   form, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
   label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-  input[type=file] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  input[type=file], input[type=number] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
   button { margin-top: 16px; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .6; cursor: wait; }
   .msg { margin-top: 14px; color: var(--muted); }
@@ -51,6 +51,15 @@
   .NOT { background: var(--warn-bg); color: var(--warn); }
   tr.check td.m { background: var(--check-bg); }
   .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  h2 { font-size: 18px; margin: 32px 0 4px; }
+  #result2 { display: none; }
+  main > h2:first-of-type { margin-top: 8px; }
+  #result2 { margin-top: 20px; }
+  .formula { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+  .formula b { color: var(--text); }
+  .dl { display: flex; gap: 8px; flex-wrap: wrap; }
+  td.d { white-space: normal; min-width: 240px; }
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -58,6 +67,7 @@
   <h1>Loading Sheet Check</h1>
   <p class="sub">Match a handwritten loading sheet against the tax invoices for the load. The Excel report downloads when the check finishes.</p>
 
+  <h2>Step 1 · Loading sheet vs invoices</h2>
   <form id="f">
     <div class="grid">
       <div><label for="sheet">Loading sheet photo</label><input id="sheet" name="sheet" type="file" accept="image/*" required></div>
@@ -67,7 +77,25 @@
     <div id="msg" class="msg"></div>
   </form>
 
+  <section id="step2">
+    <h2>Step 2 · Rate check</h2>
+    <p class="sub">Works on the Step 1 outcome: each invoice rate is checked against the mastersheet weight × today's rate per kg. Gives one combined Excel and PDF (Step 1 + rate check).</p>
+    <form id="f2">
+      <div class="grid">
+        <div><label for="step1file">Step 1 report (Excel) — only if Step 1 is not run above</label><input id="step1file" type="file" accept=".xlsx"></div>
+        <div><label for="master">Mastersheet (Excel / CSV)</label><input id="master" type="file" accept=".xlsx,.xlsm,.csv" required></div>
+        <div><label for="rate">Today's Rate / Kg (Rs)</label><input id="rate" type="number" step="0.01" min="0.01" placeholder="e.g. 119.54" required></div>
+        <div><label for="tol">Tolerance (%)</label><input id="tol" type="number" step="0.01" min="0" value="0.5" required></div>
+      </div>
+      <p class="formula">Expected rate = <b>Rate/Kg × mastersheet Kg</b> · CORRECT when the invoice Rate(Rs) is within the tolerance.</p>
+      <p class="formula" id="src2">Step 1 outcome: none yet — run Step 1 above, or choose a Step 1 report saved earlier.</p>
+      <button id="go2" type="submit">Check rates</button>
+      <div id="msg2" class="msg"></div>
+    </form>
+  </section>
+
   <section id="result">
+    <h2>Step 1 result · Loading sheet vs invoices</h2>
     <div class="head"><strong id="title"></strong><a id="dl" download>Download Excel again</a></div>
     <div class="stats" id="stats"></div>
     <div class="filters" id="filters"></div>
@@ -76,11 +104,43 @@
     </tr></thead><tbody id="rows"></tbody></table></div>
     <p class="note">Blue model cells: fuzzy pairing below 90% — check by eye. Compare the sheet total with the total written on the paper.</p>
   </section>
+
+  <section id="result2">
+    <h2>Step 2 result · Rate check</h2>
+    <div class="head"><strong id="title2"></strong>
+      <div class="dl"><a id="dlx2" download>Download combined Excel</a><a id="dlp2" download>Download combined PDF</a></div>
+    </div>
+    <div id="warn2"></div>
+    <div class="stats" id="stats2"></div>
+    <div class="filters" id="filters2"></div>
+    <div class="table"><table><thead><tr>
+      <th>Result</th><th>Reason</th><th>Invoice / Sr</th><th>Item code</th><th>Description</th><th>Matched by</th>
+      <th>Kg/pc</th><th>Qty</th><th>Expected rate</th><th>Invoice rate</th><th>Diff</th><th>Diff %</th>
+    </tr></thead><tbody id="rows2"></tbody></table></div>
+    <p class="note">Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
+  </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 let data = null, filter = "ALL";
+let invoices = [], invoicesKey = "";   // invoice PDFs read once, shared by step 1 and step 2
 const say = (t, err) => { $("msg").className = err ? "msg err" : "msg"; $("msg").textContent = t; };
+
+// Read the chosen invoice PDFs (no credits), unless this same selection was already read.
+async function readInvoices(status) {
+  const files = [...$("invoice").files];
+  if (!files.length) throw new Error("Choose the invoice PDFs in Step 1");
+  const key = files.map(f => `${f.name}:${f.size}:${f.lastModified}`).join("|");
+  if (key === invoicesKey) return invoices;
+  invoices = []; invoicesKey = "";
+  for (const [i, f] of files.entries()) {
+    status(`Reading invoice ${i + 1} of ${files.length}: ${f.name}…`);
+    const fd = new FormData(); fd.append("invoice", f);
+    invoices.push(await post("/api/invoice", fd));
+  }
+  invoicesKey = key;
+  return invoices;
+}
 
 async function post(url, body) {
   const r = await fetch(url, { method: "POST", body });
@@ -112,19 +172,15 @@ $("f").addEventListener("submit", async e => {
   e.preventDefault();
   $("go").disabled = true;
   try {
-    const files = [...$("invoice").files];
-    const invoices = [];
-    for (const [i, f] of files.entries()) {
-      say(`Reading invoice ${i + 1} of ${files.length}: ${f.name}…`);
-      const fd = new FormData(); fd.append("invoice", f);
-      invoices.push(await post("/api/invoice", fd));
-    }
+    await readInvoices(say);
+    $("result2").style.display = "none";   // an earlier rate check was on another Step 1 outcome
     say("Reading the loading sheet with renamed.to — about half a minute…");
     const fd = new FormData();
     fd.append("sheet", await shrink($("sheet").files[0]));
     fd.append("invoices", JSON.stringify(invoices));
     data = await post("/api/reconcile", fd); filter = "ALL";
-    render(); download();
+    render(); download(); showSource();
+    $("result").scrollIntoView({ behavior: "smooth" });
     say(data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}` : "");
   } catch (err) {
     say(err.message, true);
@@ -153,6 +209,96 @@ function render() {
       <td>${esc(r.status.toLowerCase())}</td><td>${esc(r.invoice_lines)}</td>
     </tr>`).join("");
   $("result").style.display = "block";
+}
+
+// ---------------- Step 2: rate check
+let rc = null, filter2 = "ALL";
+const say2 = (t, err) => { $("msg2").className = err ? "msg err" : "msg"; $("msg2").textContent = t; };
+const money = v => v == null ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc2 = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// remember the last rate and tolerance on this computer
+try {
+  const saved = JSON.parse(localStorage.getItem("ratecheck") || "{}");
+  if (saved.rate) $("rate").value = saved.rate;
+  if (saved.tol != null) $("tol").value = saved.tol;
+} catch (e) {}
+
+function blobLink(id, b64, type, name) {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  $(id).href = URL.createObjectURL(new Blob([bytes], { type }));
+  $(id).download = name;
+}
+
+// Step 2 works on the Step 1 outcome: a Step 1 report chosen here, else the Step 1 result on this page.
+function step1File() {
+  const picked = $("step1file").files[0];
+  if (picked) return picked;
+  if (!data) return null;
+  const bytes = Uint8Array.from(atob(data.xlsx), c => c.charCodeAt(0));
+  return new File([bytes], data.filename, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+function showSource() {
+  const picked = $("step1file").files[0];
+  $("src2").textContent = picked ? `Step 1 outcome: ${picked.name} (chosen above)`
+    : data ? `Step 1 outcome: ${data.filename} (Step 1 result on this page)`
+    : "Step 1 outcome: none yet — run Step 1 above, or choose a Step 1 report saved earlier.";
+}
+$("step1file").addEventListener("change", showSource);
+
+$("f2").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("go2").disabled = true;
+  try {
+    const step1 = step1File();
+    if (!step1) throw new Error("Run Step 1 above, or choose a Step 1 report (Excel) saved earlier");
+    say2("Checking rates…");
+    try { localStorage.setItem("ratecheck", JSON.stringify({ rate: $("rate").value, tol: $("tol").value })); } catch (e) {}
+    const fd = new FormData();
+    fd.append("step1", step1);
+    fd.append("master", $("master").files[0]);
+    fd.append("rate", $("rate").value);
+    fd.append("tolerance", $("tol").value);
+    rc = await post("/api/ratecheck", fd); filter2 = "ALL";
+    blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
+    blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
+    render2();
+    $("result2").scrollIntoView({ behavior: "smooth" });
+    say2("");
+  } catch (err) {
+    say2(err.message, true);
+  } finally { $("go2").disabled = false; }
+});
+
+function render2() {
+  const s = rc.summary, count = x => rc.rows.filter(r => r.result === x).length;
+  $("title2").textContent = `${rc.step1_file} · Rate ${money(s.rate_per_kg)} / Kg · tolerance ${s.tolerance_pct}% · ${s.master_file}`;
+  const warn = [];
+  for (const i of s.invoices)
+    if (i.printed_total_qty !== i.pcs) warn.push(`Invoice ${i.invoice_no}: ${i.pcs} pcs read but printed total is ${i.printed_total_qty} — check the PDF.`);
+  for (const p of rc.master_problems.slice(0, 5)) warn.push(`Mastersheet: ${p}`);
+  if (rc.master_problems.length > 5) warn.push(`…and ${rc.master_problems.length - 5} more — see the "Mastersheet notes" tab in Excel.`);
+  $("warn2").innerHTML = warn.length ? `<div class="warn">${warn.map(esc2).join("<br>")}</div>` : "";
+  const stats = [
+    [s.lines, "Invoice lines"], [s.correct, "Correct"], [s.incorrect, "Incorrect"],
+    [money(s.expected_value), "Expected value"], [money(s.invoice_value), "Invoice value"], [money(s.value_diff), "Difference"],
+  ];
+  $("stats2").innerHTML = stats.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  const opts = ["ALL", "INCORRECT", "CORRECT"];
+  $("filters2").innerHTML = opts.map(o => `<button type="button" class="${o === filter2 ? "on" : ""}" data-f="${o}">${o === "ALL" ? "All" : o[0] + o.slice(1).toLowerCase()} (${o === "ALL" ? rc.rows.length : count(o)})</button>`).join("");
+  $("filters2").querySelectorAll("button").forEach(b => b.onclick = () => { filter2 = b.dataset.f; render2(); });
+  $("rows2").innerHTML = rc.rows.filter(r => filter2 === "ALL" || r.result === filter2).map(r => `
+    <tr class="${r.check ? "check" : ""}">
+      <td><span class="pill ${r.result === "CORRECT" ? "OK" : "QTY"}">${r.result}</span></td>
+      <td>${esc2(r.status.toLowerCase())}</td><td>${esc2(r.invoice_no)} / ${esc2(r.sr)}</td><td>${esc2(r.code)}</td>
+      <td class="d">${esc2(r.desc)}</td><td class="m">${esc2(r.matched_by)}</td>
+      <td class="n">${r.kg == null ? "" : r.kg.toFixed(2)}</td><td class="n">${r.qty}</td>
+      <td class="n">${money(r.expected_rate)}</td><td class="n">${money(r.invoice_rate)}</td>
+      <td class="n">${r.diff == null ? "" : (r.diff > 0 ? "+" : "") + money(r.diff)}</td>
+      <td class="n">${r.diff_pct == null ? "" : (r.diff_pct > 0 ? "+" : "") + r.diff_pct.toFixed(2)}</td>
+    </tr>`).join("");
+  $("result2").style.display = "block";
 }
 </script>
 </body>

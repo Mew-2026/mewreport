@@ -14,6 +14,16 @@ and produces an Excel reconciliation report.
 3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
    tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
 
+4. **Rate check** (step 2) works on the Step 1 outcome: the Step 1 result on the page, or a Step 1
+   Excel (`reconciliation_*.xlsx`) saved earlier, read back by `step1_report.py` from its *Invoice
+   lines* tab, so no credits are spent again. Upload the mastersheet (*Item code*, *Material
+   description*, *weight (kg)*; `.xlsx`/`.xlsm`/`.csv`, columns found by their contents even if shifted
+   under the headers) and type today's Rate/Kg. Expected rate = Rate/Kg x mastersheet kg; CORRECT when
+   the invoice Rate(Rs) is within the tolerance % (default 0.5). Lines are found by item code (O/0 and
+   I/1 treated alike), else by description with the same battery model and numbers (flagged blue).
+   Output is one combined report: the Step 1 Excel with a *Rate check* tab added, and a PDF with the
+   Step 1 table followed by the rate check (`rate_check.py`, `mastersheet.py`).
+
 ## Run on your computer (Windows)
 
 1. Install Python 3.10+ from python.org (tick "Add python.exe to PATH").
@@ -40,6 +50,14 @@ RENAMED_API_KEY=rt_...
 ```bash
 python reconcile.py --sheet loading_sheet.jpg --invoice 5260118338.PDF 5260118339.PDF --out reports/report.xlsx
 ```
+
+Rate check on a Step 1 report, giving the combined `.xlsx` and `.pdf`:
+
+```bash
+python rate_check.py --step1 reports/report.xlsx --master mastersheet.xlsx --rate 119.54 --tolerance 0.5 --out reports/combined
+```
+
+(`--invoice a.pdf b.pdf` in place of `--step1` gives the rate check alone.)
 
 The OCR result is saved next to the photo as `<name>.ocr.json`. To rebuild the report without
 spending credits again, pass `--sheet-json <name>.ocr.json` instead of `--sheet`.
