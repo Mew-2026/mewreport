@@ -21,7 +21,7 @@ from rate_check import ordered, run_on_step1, write_excel, write_pdf  # noqa: E4
 from rate_check import report_name as rate_report_name  # noqa: E402
 from reconcile import reconcile, report_name, write_report  # noqa: E402
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=os.path.join(ROOT, "public"), static_url_path="")  # local runs; Vercel serves public/ itself
 
 
 @app.get("/")

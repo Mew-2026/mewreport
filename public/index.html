@@ -3,128 +3,414 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loading Sheet Check</title>
+<title>MEW Load Check</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5d6676; --line: #dde1e8;
-    --accent: #1f5fbf; --ok: #1e7b3c; --ok-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fde8e6;
-    --warn: #8a5a00; --warn-bg: #fff3d6; --check-bg: #e2ecfa;
+    --bg: #f3f6f9; --bg2: #e8eef4; --card: #ffffff; --text: #0f1b2d; --muted: #5b6b80; --line: #dfe6ee;
+    --brand: #0f3d63; --brand2: #14b8a6; --accent: #0e7c86; --accent-ink: #ffffff; --amber: #f59e0b;
+    --ok: #13795b; --ok-bg: #e2f6ee; --bad: #c0362c; --bad-bg: #fdecea;
+    --warn: #8a5a00; --warn-bg: #fff4d6; --check-bg: #e1ecfb; --row-hover: #f5f9fc;
+    --shadow: 0 1px 2px rgba(15, 27, 45, .05), 0 8px 24px rgba(15, 27, 45, .06);
+    --shadow-lg: 0 2px 4px rgba(15, 27, 45, .06), 0 18px 40px rgba(15, 27, 45, .10);
+    --radius: 16px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #12151b; --card: #1b2029; --text: #e7eaf0; --muted: #9aa3b2; --line: #2d3440;
-      --accent: #6ea2f0; --ok: #7fd49a; --ok-bg: #1b3324; --bad: #f19a90; --bad-bg: #3c1f1c;
-      --warn: #f0c46a; --warn-bg: #3a2f14; --check-bg: #1f2d44;
+      --bg: #0b1320; --bg2: #0f1a2b; --card: #121e30; --text: #e6edf5; --muted: #93a3b8; --line: #22324a;
+      --brand: #5cc8f0; --brand2: #2dd4bf; --accent: #2bb3b1; --accent-ink: #04141a;
+      --ok: #5ad6a4; --ok-bg: #0f3227; --bad: #ff8a80; --bad-bg: #3a1714;
+      --warn: #f6c869; --warn-bg: #3a2d0f; --check-bg: #1b2d4a; --row-hover: #16243a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+      --shadow-lg: 0 2px 4px rgba(0, 0, 0, .35), 0 18px 40px rgba(0, 0, 0, .35);
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
-  form, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-  input[type=file], input[type=number] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
-  button { margin-top: 16px; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: .6; cursor: wait; }
-  .msg { margin-top: 14px; color: var(--muted); }
-  .msg.err { color: var(--bad); }
-  #result { margin-top: 20px; display: none; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  .stat b { display: block; font-size: 22px; }
-  .stat span { color: var(--muted); font-size: 13px; }
-  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .head a { background: var(--accent); color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; }
-  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-  .filters button { margin: 0; padding: 5px 10px; background: var(--card); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
-  .filters button.on { border-color: var(--accent); color: var(--accent); }
-  .table { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
-  .pill { padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; }
-  .OK { background: var(--ok-bg); color: var(--ok); }
-  .QTY { background: var(--bad-bg); color: var(--bad); }
-  .NOT { background: var(--warn-bg); color: var(--warn); }
-  tr.check td.m { background: var(--check-bg); }
-  .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
-  h2 { font-size: 18px; margin: 32px 0 4px; }
-  #result2 { display: none; }
-  main > h2:first-of-type { margin-top: 8px; }
-  #result2 { margin-top: 20px; }
-  .formula { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; color: var(--text); font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: radial-gradient(1200px 500px at 85% -10%, rgba(20, 184, 166, .14), transparent 60%),
+                radial-gradient(900px 400px at -10% 0%, rgba(15, 61, 99, .12), transparent 60%), var(--bg);
+    background-attachment: fixed; min-height: 100vh;
+  }
+
+  /* ---------- header */
+  header.top {
+    position: sticky; top: 0; z-index: 20; backdrop-filter: saturate(1.4) blur(10px);
+    background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line);
+  }
+  .top-in { display: flex; align-items: center; gap: 14px; padding: 12px clamp(16px, 3vw, 40px); }
+  .logo { width: 44px; height: 44px; flex: none; animation: spin-in .9s cubic-bezier(.2, .8, .2, 1) both; }
+  .brand b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+  .brand span { display: block; font-size: 12px; color: var(--muted); }
+  .top .spacer { flex: 1; }
+  .chip { font-size: 12px; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+          padding: 6px 10px; border-radius: 99px; white-space: nowrap; }
+
+  main { width: 100%; max-width: 1680px; margin: 0 auto; padding: 28px clamp(16px, 3vw, 40px) 64px; }
+  .hero { margin-bottom: 22px; animation: rise .6s ease both; }
+  .hero h1 { font-size: clamp(24px, 3vw, 34px); line-height: 1.15; margin: 0 0 6px; letter-spacing: -.02em; font-weight: 800; }
+  .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--brand), var(--brand2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { color: var(--muted); margin: 0; max-width: 860px; }
+
+  /* ---------- step cards */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 22px; align-items: start; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: clamp(18px, 2vw, 26px); position: relative; overflow: hidden; animation: rise .6s ease both;
+  }
+  .card:nth-child(2) { animation-delay: .08s; }
+  .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--brand), var(--brand2)); }
+  .card-h { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .num { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; color: #fff; flex: none;
+         background: linear-gradient(135deg, var(--brand2), var(--brand)); box-shadow: 0 6px 16px rgba(14, 124, 134, .3); }
+  .card h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+  .card .sub { color: var(--muted); margin: 4px 0 18px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
+  label.lbl { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  .opt { color: var(--muted); font-weight: 500; }
+
+  /* ---------- drop zones (the real file input covers the zone: click, keyboard and drag-drop all work) */
+  .drop {
+    position: relative; border: 2px dashed color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 14px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--card)), var(--card));
+    padding: 18px 16px; min-height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 6px; transition: border-color .2s, background .2s, transform .2s, box-shadow .2s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(14, 124, 134, .14); }
+  .drop.over { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+  .drop:focus-within { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+  .drop input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .drop .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--accent);
+               background: color-mix(in srgb, var(--accent) 12%, transparent); transition: transform .3s; }
+  .drop:hover .ico, .drop.over .ico { transform: translateY(-3px) scale(1.05); }
+  .drop .t { font-weight: 600; font-size: 14px; }
+  .drop .t u { text-decoration: none; color: var(--accent); }
+  .drop .h { font-size: 12px; color: var(--muted); }
+  .drop.has { border-style: solid; border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); background: color-mix(in srgb, var(--ok) 6%, var(--card)); }
+  .drop.has .ico { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 4px; position: relative; z-index: 1; pointer-events: none; }
+  .file { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; font-size: 12px; font-weight: 600; padding: 4px 10px;
+          border-radius: 99px; background: var(--card); border: 1px solid var(--line); animation: pop .3s ease both; }
+  .file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+  .file small { color: var(--muted); font-weight: 500; }
+  .thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); box-shadow: var(--shadow); animation: pop .3s ease both; }
+
+  .field { position: relative; }
+  .field input[type=number] {
+    width: 100%; padding: 12px 54px 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    color: var(--text); font: inherit; font-size: 16px; font-weight: 600; transition: border-color .2s, box-shadow .2s;
+  }
+  .field input[type=number]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .field .unit { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; font-weight: 600; pointer-events: none; }
+
+  .formula { margin: 14px 0 0; color: var(--muted); font-size: 13px; padding: 10px 12px; border-radius: 10px; background: var(--bg2); }
   .formula b { color: var(--text); }
+  .src { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .src i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+  .src.ready i { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+
+  .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 18px; }
+  .btn {
+    position: relative; display: inline-flex; align-items: center; gap: 10px; border: 0; border-radius: 12px; cursor: pointer;
+    padding: 12px 22px; font: inherit; font-weight: 700; color: #fff; text-decoration: none;
+    background: linear-gradient(135deg, var(--accent), var(--brand)); box-shadow: 0 8px 20px rgba(14, 124, 134, .28);
+    transition: transform .15s, box-shadow .2s, filter .2s;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(14, 124, 134, .34); filter: brightness(1.05); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { cursor: progress; filter: saturate(.6); opacity: .85; transform: none; }
+  .btn .spin { display: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; animation: rot .8s linear infinite; }
+  .btn:disabled .spin { display: inline-block; }
+  .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.sm { padding: 9px 14px; font-size: 13px; border-radius: 10px; }
+
+  .msg { font-size: 14px; color: var(--muted); min-height: 1.5em; }
+  .msg.err { color: var(--bad); font-weight: 600; }
+  .progress { height: 4px; border-radius: 4px; background: var(--bg2); overflow: hidden; margin-top: 16px; display: none; }
+  .progress.on { display: block; }
+  .progress i { display: block; height: 100%; width: 40%; border-radius: 4px; background: linear-gradient(90deg, var(--brand2), var(--brand)); animation: slide 1.4s ease-in-out infinite; }
+
+  /* ---------- results */
+  .result { display: none; margin-top: 28px; }
+  .result.show { display: block; animation: rise .5s ease both; }
+  .result-h { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .result-h h2 { margin: 0 0 2px; font-size: 21px; letter-spacing: -.01em; }
+  .result-h .meta { color: var(--muted); font-size: 13px; }
+  .verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 99px; margin-top: 8px; }
+  .verdict.good { background: var(--ok-bg); color: var(--ok); }
+  .verdict.bad { background: var(--bad-bg); color: var(--bad); }
   .dl { display: flex; gap: 8px; flex-wrap: wrap; }
-  td.d { white-space: normal; min-width: 240px; }
-  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow);
+          animation: pop .45s ease both; position: relative; overflow: hidden; }
+  .stat b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .stat.good b { color: var(--ok); } .stat.bad b { color: var(--bad); }
+  .stat::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--line); }
+  .stat.good::after { background: var(--ok); } .stat.bad::after { background: var(--bad); } .stat.brand::after { background: var(--brand2); }
+
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .filters { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .filters button { border: 0; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s, color .2s; }
+  .filters button:hover { color: var(--text); }
+  .filters button.on { background: linear-gradient(135deg, var(--accent), var(--brand)); color: #fff; }
+  .search { flex: 0 1 280px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; }
+  .search:focus { outline: none; border-color: var(--accent); }
+
+  /* tables fit the width: fixed layout, wrapping cells, no sideways scrolling */
+  .table { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: clip; }  /* clip, not hidden: keeps the sticky header working */
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 13.5px; }
+  thead th { position: sticky; top: var(--hdr, 69px); z-index: 2; background: color-mix(in srgb, var(--card) 92%, var(--bg2)); }
+  thead th:first-child { border-top-left-radius: var(--radius); } thead th:last-child { border-top-right-radius: var(--radius); }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  th { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+  tbody tr { animation: fadeRow .35s ease both; transition: background .15s; }
+  tbody tr:hover { background: var(--row-hover); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tr.bad-row td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+  tr.good-row td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+  .pos { color: var(--bad); font-weight: 700; } .neg { color: var(--warn); font-weight: 700; }
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+  .pill.OK { background: var(--ok-bg); color: var(--ok); }
+  .pill.BAD { background: var(--bad-bg); color: var(--bad); }
+  .reason { font-size: 12.5px; color: var(--muted); text-transform: capitalize; }
+  tr.check td.m { background: var(--check-bg); }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+  .note i { width: 12px; height: 12px; border-radius: 3px; background: var(--check-bg); border: 1px solid var(--line); flex: none; }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+
+  /* narrow screens: each row becomes a card, so nothing scrolls sideways */
+  @media (max-width: 860px) {
+    thead { display: none; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    tbody tr { border-bottom: 1px solid var(--line); padding: 10px 6px; }
+    td { border: 0; padding: 4px 10px; display: flex; justify-content: space-between; gap: 12px; text-align: right; }
+    td::before { content: attr(data-l); color: var(--muted); font: 600 12px Inter, system-ui, sans-serif; text-align: left; flex: none; }
+    td.n { justify-content: space-between; }
+    tr.bad-row td:first-child, tr.good-row td:first-child { box-shadow: none; }
+    tr.bad-row { box-shadow: inset 3px 0 0 var(--bad); } tr.good-row { box-shadow: inset 3px 0 0 var(--ok); }
+    .top .chip { display: none; }
+  }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 16px 32px; }
+  footer img { width: 18px; height: 18px; vertical-align: -4px; margin-right: 6px; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @keyframes pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+  @keyframes fadeRow { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+  @keyframes spin-in { from { opacity: 0; transform: rotate(-120deg) scale(.6); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
+<header class="top">
+  <div class="top-in">
+    <img class="logo" src="logo.svg" alt="">
+    <div class="brand"><b>Mahesh Engineering Works</b><span>Battery scrap · Load &amp; invoice check</span></div>
+    <div class="spacer"></div>
+    <span class="chip">Invoices read free · Loading sheet via renamed.to</span>
+  </div>
+</header>
+
 <main>
-  <h1>Loading Sheet Check</h1>
-  <p class="sub">Match a handwritten loading sheet against the tax invoices for the load. The Excel report downloads when the check finishes.</p>
+  <section class="hero">
+    <h1>Every load, <em>checked line by line</em></h1>
+    <p>Step 1 matches the handwritten loading sheet with the tax invoices. Step 2 checks every invoice rate against the mastersheet weight and today's rate per kg. Reports download as Excel and PDF.</p>
+  </section>
 
-  <h2>Step 1 · Loading sheet vs invoices</h2>
-  <form id="f">
-    <div class="grid">
-      <div><label for="sheet">Loading sheet photo</label><input id="sheet" name="sheet" type="file" accept="image/*" required></div>
-      <div><label for="invoice">Invoice PDFs (one or more)</label><input id="invoice" name="invoice" type="file" accept="application/pdf" multiple required></div>
-    </div>
-    <button id="go" type="submit">Check</button>
-    <div id="msg" class="msg"></div>
-  </form>
-
-  <section id="step2">
-    <h2>Step 2 · Rate check</h2>
-    <p class="sub">Works on the Step 1 outcome: each invoice rate is checked against the mastersheet weight × today's rate per kg. Gives one combined Excel and PDF (Step 1 + rate check).</p>
-    <form id="f2">
+  <div class="steps">
+    <form id="f" class="card" novalidate>
+      <div class="card-h"><div class="num">1</div><h2>Loading sheet vs invoices</h2></div>
+      <p class="sub">Upload the loading sheet photo and every invoice PDF for this truck. Takes about half a minute.</p>
       <div class="grid">
-        <div><label for="step1file">Step 1 report (Excel) — only if Step 1 is not run above</label><input id="step1file" type="file" accept=".xlsx"></div>
-        <div><label for="master">Mastersheet (Excel / CSV)</label><input id="master" type="file" accept=".xlsx,.xlsm,.csv" required></div>
-        <div><label for="rate">Today's Rate / Kg (Rs)</label><input id="rate" type="number" step="0.01" min="0.01" placeholder="e.g. 119.54" required></div>
-        <div><label for="tol">Tolerance (%)</label><input id="tol" type="number" step="0.01" min="0" value="0.5" required></div>
+        <div>
+          <label class="lbl" for="sheet">Loading sheet photo</label>
+          <div class="drop" data-for="sheet">
+            <input id="sheet" name="sheet" type="file" accept="image/*">
+            <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></div>
+            <div class="t">Drop the photo or <u>browse</u></div>
+            <div class="h">JPG / PNG · phone photos are fine</div>
+            <div class="files"></div>
+          </div>
+        </div>
+        <div>
+          <label class="lbl" for="invoice">Invoice PDFs <span class="opt">· one or more</span></label>
+          <div class="drop" data-for="invoice">
+            <input id="invoice" name="invoice" type="file" accept="application/pdf" multiple>
+            <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></div>
+            <div class="t">Drop invoices or <u>browse</u></div>
+            <div class="h">System-generated PDFs · select all for the load</div>
+            <div class="files"></div>
+          </div>
+        </div>
+      </div>
+      <div class="progress" id="prog"><i></i></div>
+      <div class="actions">
+        <button class="btn" id="go" type="submit"><span class="spin"></span>Check loading sheet</button>
+        <div id="msg" class="msg"></div>
+      </div>
+    </form>
+
+    <form id="f2" class="card" novalidate>
+      <div class="card-h"><div class="num">2</div><h2>Rate check</h2></div>
+      <p class="sub">Each invoice rate vs mastersheet weight × today's rate per kg. Gives one combined Excel and PDF.</p>
+      <div class="grid">
+        <div>
+          <label class="lbl" for="master">Mastersheet</label>
+          <div class="drop" data-for="master">
+            <input id="master" type="file" accept=".xlsx,.xlsm,.csv">
+            <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></div>
+            <div class="t">Drop mastersheet or <u>browse</u></div>
+            <div class="h">Excel / CSV · Item code, description, weight (kg)</div>
+            <div class="files"></div>
+          </div>
+        </div>
+        <div>
+          <label class="lbl" for="step1file">Step 1 report <span class="opt">· only if Step 1 isn't run here</span></label>
+          <div class="drop" data-for="step1file">
+            <input id="step1file" type="file" accept=".xlsx">
+            <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
+            <div class="t">Drop a saved report or <u>browse</u></div>
+            <div class="h">reconciliation_*.xlsx from Step 1</div>
+            <div class="files"></div>
+          </div>
+        </div>
+        <div>
+          <label class="lbl" for="rate">Today's rate</label>
+          <div class="field"><input id="rate" type="number" step="0.01" min="0.01" placeholder="119.54" inputmode="decimal"><span class="unit">Rs / Kg</span></div>
+        </div>
+        <div>
+          <label class="lbl" for="tol">Tolerance</label>
+          <div class="field"><input id="tol" type="number" step="0.01" min="0" value="0.5" inputmode="decimal"><span class="unit">%</span></div>
+        </div>
       </div>
       <p class="formula">Expected rate = <b>Rate/Kg × mastersheet Kg</b> · CORRECT when the invoice Rate(Rs) is within the tolerance.</p>
-      <p class="formula" id="src2">Step 1 outcome: none yet — run Step 1 above, or choose a Step 1 report saved earlier.</p>
-      <button id="go2" type="submit">Check rates</button>
-      <div id="msg2" class="msg"></div>
+      <div class="src" id="srcwrap"><i></i><span id="src2">Step 1 outcome: none yet — run Step 1, or drop a Step 1 report saved earlier.</span></div>
+      <div class="progress" id="prog2"><i></i></div>
+      <div class="actions">
+        <button class="btn" id="go2" type="submit"><span class="spin"></span>Check rates</button>
+        <div id="msg2" class="msg"></div>
+      </div>
     </form>
-  </section>
+  </div>
 
-  <section id="result">
-    <h2>Step 1 result · Loading sheet vs invoices</h2>
-    <div class="head"><strong id="title"></strong><a id="dl" download>Download Excel again</a></div>
+  <section id="result" class="result">
+    <div class="result-h">
+      <div><h2>Step 1 result · Loading sheet vs invoices</h2><div class="meta" id="title"></div><div id="verdict"></div></div>
+      <div class="dl"><a class="btn sm" id="dl" download>⬇ Excel report</a></div>
+    </div>
     <div class="stats" id="stats"></div>
-    <div class="filters" id="filters"></div>
-    <div class="table"><table><thead><tr>
-      <th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th>Sheet</th><th>Invoice</th><th>Diff</th><th>Reason</th><th>Invoice Sr.</th>
-    </tr></thead><tbody id="rows"></tbody></table></div>
-    <p class="note">Blue model cells: fuzzy pairing below 90% — check by eye. Compare the sheet total with the total written on the paper.</p>
+    <div class="bar"><div class="filters" id="filters"></div><input class="search" id="q" type="search" placeholder="Search model or Sr no…"></div>
+    <div class="table"><table>
+      <colgroup><col style="width:11%"><col style="width:6%"><col style="width:14%"><col style="width:14%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:13%"><col style="width:19%"></colgroup>
+      <thead><tr><th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th class="n">Sheet</th><th class="n">Invoice</th><th class="n">Diff</th><th>Reason</th><th>Invoice Sr.</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="note"><i></i>Blue model cells: fuzzy pairing below 90% — check by eye. Compare the sheet total with the total written on the paper.</p>
   </section>
 
-  <section id="result2">
-    <h2>Step 2 result · Rate check</h2>
-    <div class="head"><strong id="title2"></strong>
-      <div class="dl"><a id="dlx2" download>Download combined Excel</a><a id="dlp2" download>Download combined PDF</a></div>
+  <section id="result2" class="result">
+    <div class="result-h">
+      <div><h2>Step 2 result · Rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
+      <div class="dl"><a class="btn sm" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
     </div>
     <div id="warn2"></div>
     <div class="stats" id="stats2"></div>
-    <div class="filters" id="filters2"></div>
-    <div class="table"><table><thead><tr>
-      <th>Result</th><th>Reason</th><th>Invoice / Sr</th><th>Item code</th><th>Description</th><th>Matched by</th>
-      <th>Kg/pc</th><th>Qty</th><th>Expected rate</th><th>Invoice rate</th><th>Diff</th><th>Diff %</th>
-    </tr></thead><tbody id="rows2"></tbody></table></div>
-    <p class="note">Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
+    <div class="bar"><div class="filters" id="filters2"></div><input class="search" id="q2" type="search" placeholder="Search code, description, invoice…"></div>
+    <div class="table"><table>
+      <colgroup><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:10%"><col style="width:20%"><col style="width:8%"><col style="width:5%"><col style="width:4%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:5%"></colgroup>
+      <thead><tr>
+        <th>Result</th><th>Reason</th><th>Invoice / Sr</th><th>Item code</th><th>Description</th><th>Matched by</th>
+        <th class="n">Kg/pc</th><th class="n">Qty</th><th class="n">Expected</th><th class="n">Invoice</th><th class="n">Diff</th><th class="n">Diff %</th>
+      </tr></thead>
+      <tbody id="rows2"></tbody>
+    </table></div>
+    <p class="note"><i></i>Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
   </section>
 </main>
+
+<footer><img src="logo.svg" alt="">Mahesh Engineering Works · B-33 Bela Industrial Area, Phase 2, Muzaffarpur</footer>
+
 <script>
 const $ = id => document.getElementById(id);
-let data = null, filter = "ALL";
+// sticky table headers sit just under the sticky page header
+const setHdr = () => document.documentElement.style.setProperty("--hdr", document.querySelector("header.top").offsetHeight + "px");
+addEventListener("resize", setHdr); setHdr();
+let data = null, filter = "ALL", q = "";
 let invoices = [], invoicesKey = "";   // invoice PDFs read once, shared by step 1 and step 2
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const say = (t, err) => { $("msg").className = err ? "msg err" : "msg"; $("msg").textContent = t; };
+const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+
+// ---------------- drop zones: show chosen files, highlight on drag
+document.querySelectorAll(".drop").forEach(z => {
+  const input = z.querySelector("input"), list = z.querySelector(".files");
+  const show = () => {
+    const files = [...input.files];
+    z.classList.toggle("has", files.length > 0);
+    list.innerHTML = "";
+    if (files.length === 1 && files[0].type.startsWith("image/")) {
+      const img = document.createElement("img");
+      img.className = "thumb"; img.alt = ""; img.src = URL.createObjectURL(files[0]);
+      list.appendChild(img);
+    }
+    files.forEach((f, i) => {
+      const chip = document.createElement("span");
+      chip.className = "file"; chip.style.animationDelay = (i * 40) + "ms";
+      chip.innerHTML = `<span>${esc(f.name)}</span><small>${kb(f.size)}</small>`;
+      list.appendChild(chip);
+    });
+  };
+  input.addEventListener("change", show);
+  ["dragenter", "dragover"].forEach(ev => z.addEventListener(ev, () => z.classList.add("over")));
+  ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, () => z.classList.remove("over")));
+});
+
+function busy(n, on) {
+  $(n === 1 ? "go" : "go2").disabled = on;
+  $(n === 1 ? "prog" : "prog2").classList.toggle("on", on);
+}
+
+// count numbers up when results appear
+function countUp(el) {
+  const target = Number(el.dataset.v), dec = Number(el.dataset.d || 0), sign = el.dataset.s === "1";
+  if (!isFinite(target) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const t0 = performance.now(), dur = 700;
+  const fmt = v => (sign && v > 0 ? "+" : "") + v.toLocaleString("en-IN", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const step = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(target * e);
+    if (k < 1) requestAnimationFrame(step); else el.textContent = fmt(target);
+  };
+  requestAnimationFrame(step);
+}
+function statsHTML(list) {
+  return list.map(([v, l, cls, dec, sign], i) => {
+    const num = typeof v === "number";
+    const txt = num ? (sign && v > 0 ? "+" : "") + v.toLocaleString("en-IN", { minimumFractionDigits: dec || 0, maximumFractionDigits: dec || 0 }) : esc(v);
+    return `<div class="stat ${cls || ""}" style="animation-delay:${i * 50}ms"><b ${num ? `data-v="${v}" data-d="${dec || 0}" data-s="${sign ? 1 : 0}"` : ""}>${txt}</b><span>${esc(l)}</span></div>`;
+  }).join("");
+}
+function filtersHTML(cur, rows) {
+  const count = x => rows.filter(r => r.result === x).length;
+  return [["ALL", "All", rows.length], ["INCORRECT", "Incorrect", count("INCORRECT")], ["CORRECT", "Correct", count("CORRECT")]]
+    .map(([k, l, n]) => `<button type="button" class="${k === cur ? "on" : ""}" data-f="${k}">${l} · ${n}</button>`).join("");
+}
+const verdictHTML = (bad, total, unit) => bad === 0
+  ? `<span class="verdict good">✔ All ${total} ${unit} correct</span>`
+  : `<span class="verdict bad">✖ ${bad} of ${total} ${unit} incorrect</span>`;
+const signed = (v, f) => v == null ? "" : `<span class="${v > 0 ? "pos" : v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${f(v)}</span>`;
 
 // Read the chosen invoice PDFs (no credits), unless this same selection was already read.
 async function readInvoices(status) {
@@ -170,52 +456,62 @@ function download() {
 
 $("f").addEventListener("submit", async e => {
   e.preventDefault();
-  $("go").disabled = true;
+  if (!$("sheet").files.length) return say("Choose the loading sheet photo", true);
+  if (!$("invoice").files.length) return say("Choose the invoice PDFs", true);
+  busy(1, true);
   try {
     await readInvoices(say);
-    $("result2").style.display = "none";   // an earlier rate check was on another Step 1 outcome
+    $("result2").classList.remove("show");   // an earlier rate check was on another Step 1 outcome
     say("Reading the loading sheet with renamed.to — about half a minute…");
     const fd = new FormData();
     fd.append("sheet", await shrink($("sheet").files[0]));
     fd.append("invoices", JSON.stringify(invoices));
-    data = await post("/api/reconcile", fd); filter = "ALL";
+    data = await post("/api/reconcile", fd); filter = "ALL"; q = ""; $("q").value = "";
     render(); download(); showSource();
     $("result").scrollIntoView({ behavior: "smooth" });
-    say(data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}` : "");
+    say(data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}` : "Done — Excel report downloaded.");
   } catch (err) {
     say(err.message, true);
-  } finally { $("go").disabled = false; }
+  } finally { busy(1, false); }
 });
 
-function render() {
-  const d = data, count = s => d.rows.filter(r => r.result === s).length;
-  $("title").textContent = d.invoices.map(i => `${i.invoice_no} (${i.date})`).join(" + ") + ` · ${d.invoices[0].recipient}`;
-  const stats = [
-    [d.sheet_total, "Loading sheet pcs"], [d.invoice_total, `Invoice pcs (${d.invoices.length} invoice${d.invoices.length > 1 ? "s" : ""})`],
-    [d.invoice_total - d.sheet_total, "Difference"], [count("CORRECT"), "Correct"], [count("INCORRECT"), "Incorrect"],
-  ];
-  $("stats").innerHTML = stats.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
-  const opts = ["ALL", "INCORRECT", "CORRECT"];
-  $("filters").innerHTML = opts.map(o => `<button type="button" class="${o === filter ? "on" : ""}" data-f="${o}">${o === "ALL" ? "All" : o[0] + o.slice(1).toLowerCase()} (${o === "ALL" ? d.rows.length : count(o)})</button>`).join("");
-  $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(); });
-  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function render(animate = true) {
+  const d = data, count = s => d.rows.filter(r => r.result === s).length, bad = count("INCORRECT");
+  $("title").textContent = d.invoices.map(i => `${i.invoice_no} (${i.date})`).join(" + ") + ` · ${d.invoices[0].recipient || ""}`;
+  $("verdict").innerHTML = verdictHTML(bad, d.rows.length, "rows");
+  if (animate) {
+    const diff = d.invoice_total - d.sheet_total;
+    $("stats").innerHTML = statsHTML([
+      [d.sheet_total, "Loading sheet pcs", "brand"],
+      [d.invoice_total, `Invoice pcs · ${d.invoices.length} invoice${d.invoices.length > 1 ? "s" : ""}`, "brand"],
+      [diff, "Difference (invoice − sheet)", diff === 0 ? "good" : "bad", 0, true],
+      [count("CORRECT"), "Correct rows", "good"], [bad, "Incorrect rows", bad ? "bad" : "good"],
+    ]);
+    $("stats").querySelectorAll("b[data-v]").forEach(countUp);
+  }
+  $("filters").innerHTML = filtersHTML(filter, d.rows);
+  $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(false); });
+  const needle = q.toLowerCase();
   const rows = d.rows.filter(r => filter === "ALL" || r.result === filter)
+    .filter(r => !needle || [r.sheet_model, r.invoice_model, r.line, r.invoice_lines, r.status].join(" ").toLowerCase().includes(needle))
     .sort((a, b) => (a.result === "CORRECT") - (b.result === "CORRECT"));
-  $("rows").innerHTML = rows.map(r => `
-    <tr class="${r.check ? "check" : ""}">
-      <td><span class="pill ${r.result === "CORRECT" ? "OK" : "QTY"}">${r.result}</span></td>
-      <td>${esc(r.line)}</td><td class="m">${esc(r.sheet_model)}</td><td class="m">${esc(r.invoice_model)}</td>
-      <td class="n">${r.sheet_qty}</td><td class="n">${r.invoice_qty}</td><td class="n">${r.diff > 0 ? "+" : ""}${r.diff}</td>
-      <td>${esc(r.status.toLowerCase())}</td><td>${esc(r.invoice_lines)}</td>
-    </tr>`).join("");
-  $("result").style.display = "block";
+  $("rows").innerHTML = rows.length ? rows.map((r, i) => `
+    <tr class="${r.check ? "check " : ""}${r.result === "CORRECT" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(i, 30) * 18}ms">
+      <td data-l="Result"><span class="pill ${r.result === "CORRECT" ? "OK" : "BAD"}">${r.result}</span></td>
+      <td data-l="Line">${esc(r.line)}</td>
+      <td class="m mono" data-l="Sheet model">${esc(r.sheet_model)}</td><td class="m mono" data-l="Invoice model">${esc(r.invoice_model)}</td>
+      <td class="n" data-l="Sheet">${r.sheet_qty}</td><td class="n" data-l="Invoice">${r.invoice_qty}</td>
+      <td class="n" data-l="Diff">${signed(r.diff, v => v)}</td>
+      <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}</td><td data-l="Invoice Sr.">${esc(r.invoice_lines)}</td>
+    </tr>`).join("") : `<tr><td class="empty" colspan="9">No rows match.</td></tr>`;
+  $("result").classList.add("show");
 }
+$("q").addEventListener("input", e => { q = e.target.value; render(false); });
 
 // ---------------- Step 2: rate check
-let rc = null, filter2 = "ALL";
+let rc = null, filter2 = "ALL", q2 = "";
 const say2 = (t, err) => { $("msg2").className = err ? "msg err" : "msg"; $("msg2").textContent = t; };
 const money = v => v == null ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const esc2 = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // remember the last rate and tolerance on this computer
 try {
@@ -241,18 +537,21 @@ function step1File() {
 
 function showSource() {
   const picked = $("step1file").files[0];
+  $("srcwrap").classList.toggle("ready", Boolean(picked || data));
   $("src2").textContent = picked ? `Step 1 outcome: ${picked.name} (chosen above)`
     : data ? `Step 1 outcome: ${data.filename} (Step 1 result on this page)`
-    : "Step 1 outcome: none yet — run Step 1 above, or choose a Step 1 report saved earlier.";
+    : "Step 1 outcome: none yet — run Step 1, or drop a Step 1 report saved earlier.";
 }
 $("step1file").addEventListener("change", showSource);
 
 $("f2").addEventListener("submit", async e => {
   e.preventDefault();
-  $("go2").disabled = true;
+  const step1 = step1File();
+  if (!step1) return say2("Run Step 1, or drop a Step 1 report (Excel) saved earlier", true);
+  if (!$("master").files.length) return say2("Choose the mastersheet", true);
+  if (!(Number($("rate").value) > 0)) return say2("Enter today's rate per kg", true);
+  busy(2, true);
   try {
-    const step1 = step1File();
-    if (!step1) throw new Error("Run Step 1 above, or choose a Step 1 report (Excel) saved earlier");
     say2("Checking rates…");
     try { localStorage.setItem("ratecheck", JSON.stringify({ rate: $("rate").value, tol: $("tol").value })); } catch (e) {}
     const fd = new FormData();
@@ -260,46 +559,54 @@ $("f2").addEventListener("submit", async e => {
     fd.append("master", $("master").files[0]);
     fd.append("rate", $("rate").value);
     fd.append("tolerance", $("tol").value);
-    rc = await post("/api/ratecheck", fd); filter2 = "ALL";
+    rc = await post("/api/ratecheck", fd); filter2 = "ALL"; q2 = ""; $("q2").value = "";
     blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
     blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
     render2();
     $("result2").scrollIntoView({ behavior: "smooth" });
-    say2("");
+    say2("Done.");
   } catch (err) {
     say2(err.message, true);
-  } finally { $("go2").disabled = false; }
+  } finally { busy(2, false); }
 });
 
-function render2() {
-  const s = rc.summary, count = x => rc.rows.filter(r => r.result === x).length;
+function render2(animate = true) {
+  const s = rc.summary;
   $("title2").textContent = `${rc.step1_file} · Rate ${money(s.rate_per_kg)} / Kg · tolerance ${s.tolerance_pct}% · ${s.master_file}`;
-  const warn = [];
-  for (const i of s.invoices)
-    if (i.printed_total_qty !== i.pcs) warn.push(`Invoice ${i.invoice_no}: ${i.pcs} pcs read but printed total is ${i.printed_total_qty} — check the PDF.`);
-  for (const p of rc.master_problems.slice(0, 5)) warn.push(`Mastersheet: ${p}`);
-  if (rc.master_problems.length > 5) warn.push(`…and ${rc.master_problems.length - 5} more — see the "Mastersheet notes" tab in Excel.`);
-  $("warn2").innerHTML = warn.length ? `<div class="warn">${warn.map(esc2).join("<br>")}</div>` : "";
-  const stats = [
-    [s.lines, "Invoice lines"], [s.correct, "Correct"], [s.incorrect, "Incorrect"],
-    [money(s.expected_value), "Expected value"], [money(s.invoice_value), "Invoice value"], [money(s.value_diff), "Difference"],
-  ];
-  $("stats2").innerHTML = stats.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
-  const opts = ["ALL", "INCORRECT", "CORRECT"];
-  $("filters2").innerHTML = opts.map(o => `<button type="button" class="${o === filter2 ? "on" : ""}" data-f="${o}">${o === "ALL" ? "All" : o[0] + o.slice(1).toLowerCase()} (${o === "ALL" ? rc.rows.length : count(o)})</button>`).join("");
-  $("filters2").querySelectorAll("button").forEach(b => b.onclick = () => { filter2 = b.dataset.f; render2(); });
-  $("rows2").innerHTML = rc.rows.filter(r => filter2 === "ALL" || r.result === filter2).map(r => `
-    <tr class="${r.check ? "check" : ""}">
-      <td><span class="pill ${r.result === "CORRECT" ? "OK" : "QTY"}">${r.result}</span></td>
-      <td>${esc2(r.status.toLowerCase())}</td><td>${esc2(r.invoice_no)} / ${esc2(r.sr)}</td><td>${esc2(r.code)}</td>
-      <td class="d">${esc2(r.desc)}</td><td class="m">${esc2(r.matched_by)}</td>
-      <td class="n">${r.kg == null ? "" : r.kg.toFixed(2)}</td><td class="n">${r.qty}</td>
-      <td class="n">${money(r.expected_rate)}</td><td class="n">${money(r.invoice_rate)}</td>
-      <td class="n">${r.diff == null ? "" : (r.diff > 0 ? "+" : "") + money(r.diff)}</td>
-      <td class="n">${r.diff_pct == null ? "" : (r.diff_pct > 0 ? "+" : "") + r.diff_pct.toFixed(2)}</td>
-    </tr>`).join("");
-  $("result2").style.display = "block";
+  $("verdict2").innerHTML = verdictHTML(s.incorrect, s.lines, "lines");
+  if (animate) {
+    const warn = [];
+    for (const i of s.invoices)
+      if (i.printed_total_qty !== i.pcs) warn.push(`Invoice ${i.invoice_no}: ${i.pcs} pcs read but printed total is ${i.printed_total_qty} — check the PDF.`);
+    for (const p of rc.master_problems.slice(0, 5)) warn.push(`Mastersheet: ${p}`);
+    if (rc.master_problems.length > 5) warn.push(`…and ${rc.master_problems.length - 5} more — see the "Mastersheet notes" tab in Excel.`);
+    $("warn2").innerHTML = warn.length ? `<div class="warn">${warn.map(esc).join("<br>")}</div>` : "";
+    $("stats2").innerHTML = statsHTML([
+      [s.lines, "Invoice lines", "brand"], [s.correct, "Correct", "good"], [s.incorrect, "Incorrect", s.incorrect ? "bad" : "good"],
+      [s.expected_value, "Expected value (Rs)", "brand", 2], [s.invoice_value, "Invoice value (Rs)", "brand", 2],
+      [s.value_diff, "Difference (Rs)", Math.abs(s.value_diff) < 0.005 ? "good" : "bad", 2, true],
+    ]);
+    $("stats2").querySelectorAll("b[data-v]").forEach(countUp);
+  }
+  $("filters2").innerHTML = filtersHTML(filter2, rc.rows);
+  $("filters2").querySelectorAll("button").forEach(b => b.onclick = () => { filter2 = b.dataset.f; render2(false); });
+  const needle = q2.toLowerCase();
+  const rows = rc.rows.filter(r => filter2 === "ALL" || r.result === filter2)
+    .filter(r => !needle || [r.code, r.desc, r.invoice_no, r.sr, r.status, r.matched_by].join(" ").toLowerCase().includes(needle));
+  $("rows2").innerHTML = rows.length ? rows.map((r, i) => `
+    <tr class="${r.check ? "check " : ""}${r.result === "CORRECT" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(i, 30) * 18}ms">
+      <td data-l="Result"><span class="pill ${r.result === "CORRECT" ? "OK" : "BAD"}">${r.result}</span></td>
+      <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}</td>
+      <td data-l="Invoice / Sr">${esc(r.invoice_no)} / ${esc(r.sr)}</td><td class="mono" data-l="Item code">${esc(r.code)}</td>
+      <td data-l="Description">${esc(r.desc)}</td><td class="m" data-l="Matched by">${esc(r.matched_by)}</td>
+      <td class="n" data-l="Kg/pc">${r.kg == null ? "" : r.kg.toFixed(2)}</td><td class="n" data-l="Qty">${r.qty}</td>
+      <td class="n" data-l="Expected">${money(r.expected_rate)}</td><td class="n" data-l="Invoice">${money(r.invoice_rate)}</td>
+      <td class="n" data-l="Diff">${signed(r.diff, money)}</td>
+      <td class="n" data-l="Diff %">${signed(r.diff_pct, v => v.toFixed(2))}</td>
+    </tr>`).join("") : `<tr><td class="empty" colspan="12">No lines match.</td></tr>`;
+  $("result2").classList.add("show");
 }
+$("q2").addEventListener("input", e => { q2 = e.target.value; render2(false); });
 </script>
 </body>
 </html>
