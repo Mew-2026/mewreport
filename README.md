@@ -3,10 +3,14 @@
 Checks a handwritten truck loading sheet against the Luminous scrap tax invoice for the same load
 and produces an Excel reconciliation report.
 
-1. **Loading sheet** (photo) is read with the [renamed.to](https://www.renamed.to) API. renamed.to
-   only returns a filename, so the photo is cut into small overlapping strips and each strip is
-   asked to write its rows into the filename as `ROW.MODEL-QTY_...`. The strips are then stitched
-   back together (`loading_sheet_ocr.py`). One sheet costs roughly 11–15 credits.
+1. **Loading sheet**, either way:
+   - **Photo**: read with the [renamed.to](https://www.renamed.to) API. renamed.to only returns a
+     filename, so the photo is cut into small overlapping strips and each strip is asked to write its
+     rows into the filename as `ROW.MODEL-QTY_...`; the strips are stitched back together
+     (`loading_sheet_ocr.py`). One sheet costs roughly 11-15 credits.
+   - **Excel / CSV** typed as `Sr No | Model | Qty`: read directly, no credits (`loading_sheet_excel.py`).
+     The page offers the format as a download (`public/loading_sheet_template.xlsx`, pre-filled with
+     the 13/10/26 sheet as an example; regenerate with `python loading_sheet_excel.py --template ...`).
 2. **Invoices** (system-generated PDFs) are read from their text layer by position: the table's
    column lines and header labels locate each cell, so the result does not depend on how the
    PDF stores its text. First copy only; pcs read are checked against the printed total
@@ -14,15 +18,14 @@ and produces an Excel reconciliation report.
 3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
    tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
 
-4. **Rate check** (step 2) works on the Step 1 outcome: the Step 1 result on the page, or a Step 1
-   Excel (`reconciliation_*.xlsx`) saved earlier, read back by `step1_report.py` from its *Invoice
-   lines* tab, so no credits are spent again. Upload the mastersheet (*Item code*, *Material
-   description*, *weight (kg)*; `.xlsx`/`.xlsm`/`.csv`, columns found by their contents even if shifted
-   under the headers) and type today's Rate/Kg. Expected rate = Rate/Kg x mastersheet kg; CORRECT when
-   the invoice Rate(Rs) is within the tolerance % (default 0.5). Lines are found by item code (O/0 and
-   I/1 treated alike), else by description with the same battery model and numbers (flagged blue).
-   Output is one combined report: the Step 1 Excel with a *Rate check* tab added, and a PDF with the
-   Step 1 table followed by the rate check (`rate_check.py`, `mastersheet.py`).
+4. **Rate check** (step 2): upload the mastersheet (*Item code*, *Material description*, *weight (kg)*;
+   `.xlsx`/`.xlsm`/`.csv`, columns found by their contents even if shifted under the headers) and type
+   today's Rate/Kg. Expected rate = Rate/Kg x mastersheet kg; CORRECT when the invoice Rate(Rs) is within
+   the tolerance % (default 0.5). Lines are found by item code (O/0 and I/1 treated alike), else by
+   description with the same battery model and numbers (flagged blue). When Step 1 has been run on the
+   page, the output is one combined report (the Step 1 Excel with a *Rate check* tab, and a PDF of both);
+   otherwise the invoice PDFs chosen in Step 1 are checked on their own - Step 1 need not be run
+   (`rate_check.py`, `mastersheet.py`, `step1_report.py`).
 
 ## Run on your computer (Windows)
 

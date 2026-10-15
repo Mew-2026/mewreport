@@ -206,7 +206,7 @@ def report_name(inv):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--sheet", help="loading sheet photo (read with renamed.to, uses credits)")
+    src.add_argument("--sheet", help="loading sheet: photo (read with renamed.to, uses credits) or .xlsx/.csv (Sr No | Model | Qty)")
     src.add_argument("--sheet-json", help="saved result of an earlier loading_sheet_ocr run")
     ap.add_argument("--invoice", required=True, nargs="+", help="one or more tax invoice PDFs for the load")
     ap.add_argument("--out", help="Excel report path (default: reconciliation_<invoice nos>.xlsx)")
@@ -216,12 +216,16 @@ def main():
     for d in inv["duplicates"]:
         print(f"skipped duplicate invoice: {d}")
     if args.sheet:
-        from loading_sheet_ocr import read_sheet
-        sheet = read_sheet(args.sheet)
-        cache = os.path.splitext(args.sheet)[0] + ".ocr.json"
-        with open(cache, "w", encoding="utf-8") as f:
-            json.dump(sheet, f, indent=1)
-        print(f"OCR saved to {cache} (rerun with --sheet-json to skip renamed.to)")
+        if os.path.splitext(args.sheet)[1].lower() in (".xlsx", ".xlsm", ".csv"):
+            from loading_sheet_excel import read_sheet_excel   # typed sheet: no OCR, no credits
+            sheet = read_sheet_excel(args.sheet)
+        else:
+            from loading_sheet_ocr import read_sheet
+            sheet = read_sheet(args.sheet)
+            cache = os.path.splitext(args.sheet)[0] + ".ocr.json"
+            with open(cache, "w", encoding="utf-8") as f:
+                json.dump(sheet, f, indent=1)
+            print(f"OCR saved to {cache} (rerun with --sheet-json to skip renamed.to)")
     else:
         with open(args.sheet_json, encoding="utf-8") as f:
             sheet = json.load(f)

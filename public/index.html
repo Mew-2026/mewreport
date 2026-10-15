@@ -69,15 +69,28 @@
          background: linear-gradient(135deg, var(--brand2), var(--brand)); box-shadow: 0 6px 16px rgba(14, 124, 134, .3); }
   .card h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
   .card .sub { color: var(--muted); margin: 4px 0 18px; font-size: 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
-  label.lbl { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  /* two aligned columns: every label row has the same height, zones stretch to the same height */
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
+  .col { display: flex; flex-direction: column; min-width: 0; }
+  .col > .drop { flex: 1; }
+  .stack { justify-content: space-between; gap: 14px; }
+  .lbl-row { height: 30px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  label.lbl { display: block; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--line); flex: none; }
+  .seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 7px; cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+  .seg button[aria-selected="true"] { background: var(--card); color: var(--accent); box-shadow: 0 1px 3px rgba(15, 27, 45, .15); }
+  .fmt { position: relative; z-index: 2; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--accent); text-decoration: none; padding: 5px 10px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 10%, transparent); transition: background .2s; }
+  .fmt:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .drop[hidden] { display: none; }
+  .drop.swap { animation: pop .3s ease both; }
+  @media (max-width: 640px) { .pair { grid-template-columns: 1fr; } }
   .opt { color: var(--muted); font-weight: 500; }
 
   /* ---------- drop zones (the real file input covers the zone: click, keyboard and drag-drop all work) */
   .drop {
     position: relative; border: 2px dashed color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 14px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--card)), var(--card));
-    padding: 18px 16px; min-height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 18px 16px; min-height: 178px; display: flex; flex-direction: column; align-items: center; justify-content: center;
     text-align: center; gap: 6px; transition: border-color .2s, background .2s, transform .2s, box-shadow .2s;
   }
   .drop:hover, .drop.over { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(14, 124, 134, .14); }
@@ -101,7 +114,7 @@
 
   .field { position: relative; }
   .field input[type=number] {
-    width: 100%; padding: 12px 54px 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    width: 100%; height: 50px; padding: 0 64px 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
     color: var(--text); font: inherit; font-size: 16px; font-weight: 600; transition: border-color .2s, box-shadow .2s;
   }
   .field input[type=number]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
@@ -232,21 +245,35 @@
   <div class="steps">
     <form id="f" class="card" novalidate>
       <div class="card-h"><div class="num">1</div><h2>Loading sheet vs invoices</h2></div>
-      <p class="sub">Upload the loading sheet photo and every invoice PDF for this truck. Takes about half a minute.</p>
-      <div class="grid">
-        <div>
-          <label class="lbl" for="sheet">Loading sheet photo</label>
-          <div class="drop" data-for="sheet">
-            <input id="sheet" name="sheet" type="file" accept="image/*">
+      <p class="sub">Add the loading sheet (photo or Excel) and every invoice PDF for this truck.</p>
+      <div class="pair">
+        <div class="col">
+          <div class="lbl-row">
+            <label class="lbl" id="sheet-lbl" for="sheet">Loading sheet</label>
+            <div class="seg" role="tablist" aria-label="Loading sheet type">
+              <button type="button" role="tab" data-mode="photo" aria-selected="true">Photo</button>
+              <button type="button" role="tab" data-mode="excel" aria-selected="false">Excel</button>
+            </div>
+          </div>
+          <div class="drop" data-mode="photo">
+            <input id="sheet" name="sheet" type="file" accept="image/*" aria-labelledby="sheet-lbl">
             <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></div>
             <div class="t">Drop the photo or <u>browse</u></div>
-            <div class="h">JPG / PNG · phone photos are fine</div>
+            <div class="h">JPG / PNG · read by renamed.to (~30 s)</div>
+            <div class="files"></div>
+          </div>
+          <div class="drop" data-mode="excel" hidden>
+            <input id="sheetx" type="file" accept=".xlsx,.xlsm,.csv" aria-labelledby="sheet-lbl">
+            <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></div>
+            <div class="t">Drop the Excel or <u>browse</u></div>
+            <div class="h">Sr No · Model · Qty — instant, no credits</div>
+            <a class="fmt" href="loading_sheet_template.xlsx" download="loading_sheet_format.xlsx">⬇ Download Excel format</a>
             <div class="files"></div>
           </div>
         </div>
-        <div>
-          <label class="lbl" for="invoice">Invoice PDFs <span class="opt">· one or more</span></label>
-          <div class="drop" data-for="invoice">
+        <div class="col">
+          <div class="lbl-row"><label class="lbl" for="invoice">Invoice PDFs <span class="opt">· one or more</span></label></div>
+          <div class="drop">
             <input id="invoice" name="invoice" type="file" accept="application/pdf" multiple>
             <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></div>
             <div class="t">Drop invoices or <u>browse</u></div>
@@ -264,11 +291,11 @@
 
     <form id="f2" class="card" novalidate>
       <div class="card-h"><div class="num">2</div><h2>Rate check</h2></div>
-      <p class="sub">Each invoice rate vs mastersheet weight × today's rate per kg. Gives one combined Excel and PDF.</p>
-      <div class="grid">
-        <div>
-          <label class="lbl" for="master">Mastersheet</label>
-          <div class="drop" data-for="master">
+      <p class="sub">Each invoice rate vs mastersheet weight × today's rate per kg, as Excel and PDF.</p>
+      <div class="pair">
+        <div class="col">
+          <div class="lbl-row"><label class="lbl" for="master">Mastersheet</label></div>
+          <div class="drop">
             <input id="master" type="file" accept=".xlsx,.xlsm,.csv">
             <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></div>
             <div class="t">Drop mastersheet or <u>browse</u></div>
@@ -276,27 +303,19 @@
             <div class="files"></div>
           </div>
         </div>
-        <div>
-          <label class="lbl" for="step1file">Step 1 report <span class="opt">· only if Step 1 isn't run here</span></label>
-          <div class="drop" data-for="step1file">
-            <input id="step1file" type="file" accept=".xlsx">
-            <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
-            <div class="t">Drop a saved report or <u>browse</u></div>
-            <div class="h">reconciliation_*.xlsx from Step 1</div>
-            <div class="files"></div>
+        <div class="col stack">
+          <div>
+            <div class="lbl-row"><label class="lbl" for="rate">Today's rate</label></div>
+            <div class="field"><input id="rate" type="number" step="0.01" min="0.01" placeholder="119.54" inputmode="decimal"><span class="unit">Rs / Kg</span></div>
           </div>
-        </div>
-        <div>
-          <label class="lbl" for="rate">Today's rate</label>
-          <div class="field"><input id="rate" type="number" step="0.01" min="0.01" placeholder="119.54" inputmode="decimal"><span class="unit">Rs / Kg</span></div>
-        </div>
-        <div>
-          <label class="lbl" for="tol">Tolerance</label>
-          <div class="field"><input id="tol" type="number" step="0.01" min="0" value="0.5" inputmode="decimal"><span class="unit">%</span></div>
+          <div>
+            <div class="lbl-row"><label class="lbl" for="tol">Tolerance</label></div>
+            <div class="field"><input id="tol" type="number" step="0.01" min="0" value="0.5" inputmode="decimal"><span class="unit">%</span></div>
+          </div>
         </div>
       </div>
       <p class="formula">Expected rate = <b>Rate/Kg × mastersheet Kg</b> · CORRECT when the invoice Rate(Rs) is within the tolerance.</p>
-      <div class="src" id="srcwrap"><i></i><span id="src2">Step 1 outcome: none yet — run Step 1, or drop a Step 1 report saved earlier.</span></div>
+      <div class="src" id="srcwrap"><i></i><span id="src2"></span></div>
       <div class="progress" id="prog2"><i></i></div>
       <div class="actions">
         <button class="btn" id="go2" type="submit"><span class="spin"></span>Check rates</button>
@@ -348,6 +367,7 @@ const $ = id => document.getElementById(id);
 const setHdr = () => document.documentElement.style.setProperty("--hdr", document.querySelector("header.top").offsetHeight + "px");
 addEventListener("resize", setHdr); setHdr();
 let data = null, filter = "ALL", q = "";
+let sheetMode = "photo";   // loading sheet as a photo (renamed.to) or a typed Excel (read directly)
 let invoices = [], invoicesKey = "";   // invoice PDFs read once, shared by step 1 and step 2
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const say = (t, err) => { $("msg").className = err ? "msg err" : "msg"; $("msg").textContent = t; };
@@ -376,6 +396,21 @@ document.querySelectorAll(".drop").forEach(z => {
   ["dragenter", "dragover"].forEach(ev => z.addEventListener(ev, () => z.classList.add("over")));
   ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, () => z.classList.remove("over")));
 });
+
+// Photo / Excel switch for the loading sheet
+function setMode(m) {
+  sheetMode = m;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
+  document.querySelectorAll(".drop[data-mode]").forEach(z => {
+    const on = z.dataset.mode === m;
+    z.hidden = !on;
+    if (on) { z.classList.remove("swap"); void z.offsetWidth; z.classList.add("swap"); }
+  });
+  $("sheet-lbl").htmlFor = m === "excel" ? "sheetx" : "sheet";
+  try { localStorage.setItem("sheetmode", m); } catch (e) {}
+}
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+try { if (localStorage.getItem("sheetmode") === "excel") setMode("excel"); } catch (e) {}
 
 function busy(n, on) {
   $(n === 1 ? "go" : "go2").disabled = on;
@@ -456,15 +491,16 @@ function download() {
 
 $("f").addEventListener("submit", async e => {
   e.preventDefault();
-  if (!$("sheet").files.length) return say("Choose the loading sheet photo", true);
+  const excel = sheetMode === "excel", sheetFile = $(excel ? "sheetx" : "sheet").files[0];
+  if (!sheetFile) return say(excel ? "Choose the loading sheet Excel" : "Choose the loading sheet photo", true);
   if (!$("invoice").files.length) return say("Choose the invoice PDFs", true);
   busy(1, true);
   try {
     await readInvoices(say);
     $("result2").classList.remove("show");   // an earlier rate check was on another Step 1 outcome
-    say("Reading the loading sheet with renamed.to — about half a minute…");
+    say(excel ? "Reading the loading sheet Excel…" : "Reading the loading sheet with renamed.to — about half a minute…");
     const fd = new FormData();
-    fd.append("sheet", await shrink($("sheet").files[0]));
+    fd.append("sheet", excel ? sheetFile : await shrink(sheetFile));
     fd.append("invoices", JSON.stringify(invoices));
     data = await post("/api/reconcile", fd); filter = "ALL"; q = ""; $("q").value = "";
     render(); download(); showSource();
@@ -526,40 +562,42 @@ function blobLink(id, b64, type, name) {
   $(id).download = name;
 }
 
-// Step 2 works on the Step 1 outcome: a Step 1 report chosen here, else the Step 1 result on this page.
+// Step 2 uses the Step 1 result on this page (combined report); without it, the invoice PDFs chosen in Step 1.
 function step1File() {
-  const picked = $("step1file").files[0];
-  if (picked) return picked;
   if (!data) return null;
   const bytes = Uint8Array.from(atob(data.xlsx), c => c.charCodeAt(0));
   return new File([bytes], data.filename, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
 function showSource() {
-  const picked = $("step1file").files[0];
-  $("srcwrap").classList.toggle("ready", Boolean(picked || data));
-  $("src2").textContent = picked ? `Step 1 outcome: ${picked.name} (chosen above)`
-    : data ? `Step 1 outcome: ${data.filename} (Step 1 result on this page)`
-    : "Step 1 outcome: none yet — run Step 1, or drop a Step 1 report saved earlier.";
+  const n = $("invoice").files.length;
+  $("srcwrap").classList.toggle("ready", Boolean(data || n));
+  $("src2").textContent = data ? `Uses the Step 1 result (${data.filename}) — combined Excel + PDF`
+    : n ? `Uses the ${n} invoice PDF${n > 1 ? "s" : ""} chosen in Step 1 — Step 1 need not be run`
+    : "Choose the invoice PDFs in Step 1 first — running Step 1 is optional";
 }
-$("step1file").addEventListener("change", showSource);
+$("invoice").addEventListener("change", () => { if (!data) showSource(); });
+showSource();
 
 $("f2").addEventListener("submit", async e => {
   e.preventDefault();
   const step1 = step1File();
-  if (!step1) return say2("Run Step 1, or drop a Step 1 report (Excel) saved earlier", true);
+  if (!step1 && !$("invoice").files.length) return say2("Choose the invoice PDFs in Step 1", true);
   if (!$("master").files.length) return say2("Choose the mastersheet", true);
   if (!(Number($("rate").value) > 0)) return say2("Enter today's rate per kg", true);
   busy(2, true);
   try {
+    const fd = new FormData();
+    if (step1) fd.append("step1", step1);
+    else fd.append("invoices", JSON.stringify(await readInvoices(say2)));
     say2("Checking rates…");
     try { localStorage.setItem("ratecheck", JSON.stringify({ rate: $("rate").value, tol: $("tol").value })); } catch (e) {}
-    const fd = new FormData();
-    fd.append("step1", step1);
     fd.append("master", $("master").files[0]);
     fd.append("rate", $("rate").value);
     fd.append("tolerance", $("tol").value);
     rc = await post("/api/ratecheck", fd); filter2 = "ALL"; q2 = ""; $("q2").value = "";
+    $("dlx2").textContent = rc.combined ? "⬇ Combined Excel" : "⬇ Excel report";
+    $("dlp2").textContent = rc.combined ? "⬇ Combined PDF" : "⬇ PDF report";
     blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
     blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
     render2();

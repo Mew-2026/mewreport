@@ -9,3 +9,4 @@ reports/
 *.xlsx
 *.ocr.json
 __pycache__/
+!public/loading_sheet_template.xlsx
