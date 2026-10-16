@@ -234,6 +234,13 @@
   .bar-r .search { flex: 0 1 280px; }
   .bar.c2 { margin-top: 0; }
   .bar.c2 .lbl-t { color: var(--muted); font-size: 13px; }
+  /* collapsible result tables: hidden until opened */
+  .tblock { margin-top: 14px; }
+  .tb-toggle .chev { display: inline-block; transition: transform .25s; margin-right: 2px; }
+  .tblock.collapsed .tb-toggle .chev { transform: rotate(-90deg); }
+  .tblock.collapsed .tb-body { display: none; }
+  .tblock:not(.collapsed) .tb-body { animation: rise .3s ease both; }
+  .tb-n { color: var(--muted); font-weight: 500; margin-left: 4px; }
   /* collapsible loading-sheet editor */
   .ed-toggle .chev { display: inline-block; transition: transform .25s; }
   #editor.collapsed .ed-toggle .chev { transform: rotate(-90deg); }
@@ -582,6 +589,7 @@
         <button type="button" class="btn sm ghost" id="gp-all">Ungroup all</button></div>
       <div class="gp-list" id="gp-list"></div>
     </section>
+    <div class="tblock collapsed" id="tb-t1"><button type="button" class="btn sm ghost tb-toggle" aria-expanded="false"><span class="chev">▾</span><span class="tb-t">Show table</span><span class="tb-n"></span></button><div class="tb-body">
     <div class="bar"><div class="filters" id="filters"></div><div class="bar-r"><input class="search" id="q" type="search" placeholder="Search model or Sr no…"><button type="button" class="btn sm ghost" data-export="t1" data-fmt="xlsx">⬇ Excel</button><button type="button" class="btn sm ghost" data-export="t1" data-fmt="pdf">⬇ PDF</button></div></div>
     <div class="table"><table>
       <colgroup><col style="width:4%"><col style="width:16%"><col style="width:5%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"></colgroup>
@@ -589,6 +597,7 @@
       <tbody id="rows"></tbody>
     </table></div>
     <p class="note"><i></i>Models match only when they are the same battery (P at the end = Pro). Blue model cells: sheet text corrected to reach the model (e.g. ILTO → ILTJ). "Possible match" is a hint only. Tick incorrect rows (anywhere in the list) to match them by hand: net 0 → MATCHED, otherwise PARTLY MATCHED with the difference left.</p>
+    </div></div>
   </section>
 
   <section id="result2" class="result" role="tabpanel">
@@ -604,6 +613,7 @@
     <h3 class="chk"><span class="num">1</span>Check 1 · Unit price — invoice rate vs master kg × Rate/kg</h3>
     <div id="gate"></div>
     <div class="stats" id="stats2"></div>
+    <div class="tblock collapsed" id="tb-t2"><button type="button" class="btn sm ghost tb-toggle" aria-expanded="false"><span class="chev">▾</span><span class="tb-t">Show table</span><span class="tb-n"></span></button><div class="tb-body">
     <div class="bar"><div class="filters" id="filters2"></div><div class="bar-r"><input class="search" id="q2" type="search" placeholder="Search code, description, invoice…"><button type="button" class="btn sm ghost" data-export="t2" data-fmt="xlsx">⬇ Excel</button><button type="button" class="btn sm ghost" data-export="t2" data-fmt="pdf">⬇ PDF</button></div></div>
     <div class="table"><table>
       <colgroup><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:10%"><col style="width:20%"><col style="width:8%"><col style="width:5%"><col style="width:4%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:5%"></colgroup>
@@ -614,14 +624,17 @@
       <tbody id="rows2"></tbody>
     </table></div>
     <p class="note"><i></i>Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
+    </div></div>
     <div id="check2" hidden>
       <h3 class="chk"><span class="num">2</span>Check 2 · Quantity — loading sheet vs invoice, in kg</h3>
+      <div class="tblock collapsed" id="tb-t3"><button type="button" class="btn sm ghost tb-toggle" aria-expanded="false"><span class="chev">▾</span><span class="tb-t">Show table</span><span class="tb-n"></span></button><div class="tb-body">
       <div class="bar c2"><span class="lbl-t">Per model: (invoice nos − sheet nos) × master kg/pc</span><div class="bar-r"><button type="button" class="btn sm ghost" data-export="t3" data-fmt="xlsx">⬇ Excel</button><button type="button" class="btn sm ghost" data-export="t3" data-fmt="pdf">⬇ PDF</button></div></div>
       <div class="table"><table>
         <colgroup><col style="width:16%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:18%"></colgroup>
         <thead><tr><th>Model</th><th>Status</th><th class="n">Sheet qty</th><th class="n">Invoice qty</th><th class="n">Diff</th><th class="n">Master kg/pc</th><th class="n">Effect (kg)</th><th>Group / note</th></tr></thead>
         <tbody id="wrows"></tbody>
       </table></div>
+      </div></div>
       <div id="nim"></div>
     </div>
   </section>
@@ -836,6 +849,18 @@ function setCollapsed(c) {
 }
 $("ed-toggle").addEventListener("click", () => setCollapsed(!$("editor").classList.contains("collapsed")));
 
+// ---------------- result tables: hidden by default, opened with their button (choice kept between runs)
+document.querySelectorAll(".tblock").forEach(b => {
+  const btn = b.querySelector(".tb-toggle"), body = b.querySelector("tbody");
+  btn.addEventListener("click", () => {
+    const c = b.classList.toggle("collapsed");
+    btn.setAttribute("aria-expanded", String(!c));
+    b.querySelector(".tb-t").textContent = c ? "Show table" : "Hide table";
+  });
+  const count = () => { const n = body.rows.length; b.querySelector(".tb-n").textContent = n ? `(${n} rows)` : ""; };
+  new MutationObserver(count).observe(body, { childList: true });
+});
+
 // ---------------- result tabs
 let activeTab = "result";
 function showTab(id) {
@@ -888,7 +913,7 @@ function showEditor(first) {
   if (photo) { $("ed-img").onload = () => zoomTo("width"); $("ed-img").src = URL.createObjectURL(sheet.file); }
   $("ed-meta").textContent = `Read from ${photo ? "photo" : "Excel"} · ${sheet.file.name} · ${sheet.read} rows`;
   drawRows();
-  setCollapsed(false);
+  setCollapsed(true);   // tables start hidden; "Show rows" opens the editor
   $("go-t").textContent = "Run check";
   $("editor").classList.add("show");
   $("editor").scrollIntoView({ behavior: "smooth" });
