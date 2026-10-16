@@ -44,7 +44,8 @@ def model_key(desc):
     ]:
         m = re.search(pat, s)
         if m:
-            key = re.sub(r"^(\d{4})ST$", r"\1STJ", m.group(1))   # 4-digit Amaze ST = STJ, as on the sheet (reconcile.normalize)
+            key = re.sub(r"^(\d{4})ST$", r"\1STJ", m.group(1))
+            key = re.sub(r"^ECOCHRG", "ECO", key)   # Eco Charge 18000 is written ECO18000 on the sheet   # 4-digit Amaze ST = STJ, as on the sheet (reconcile.normalize)
             return key + ("P" if pro else "")
     return s
 

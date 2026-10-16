@@ -31,6 +31,7 @@ def normalize(model):
     m = re.sub(r"^ILT[O0]", "ILTJ", m)
     m = re.sub(r"^ILT[1I]", "ILTT", m)
     m = re.sub(r"^UCT[I1]", "UCTT", m)
+    m = re.sub(r"^EC[O0](\d{5})", r"ECO\1", m)   # Eco Charge: EC018000 / ECO18000
     m = re.sub(r"^(\d{4})ST(P?)$", r"\1STJ\2", m)   # only the 4-digit Amaze models (2042ST); RC18000ST stays
     m = re.sub(r"^(LPTT121[25]0H)L(P?)$", r"\1\2", m)
     return m
