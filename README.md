@@ -49,6 +49,12 @@ and produces an Excel reconciliation report.
    sheet models not in the master listed below); the PDF opens with the weight answer
    (`rate_check.py`, `mastersheet.py`, `step1_report.py`).
 
+Every table on the page - the loading sheet, Loading sheet vs invoices, Check 1 (unit price, line by
+line) and Check 2 (quantity in kg) - has **Excel** and **PDF** buttons. They export exactly what the
+table shows (filter and search applied, noted in the file), with the load details, whole-number kg and
+rupees (kg/pc 2 decimals) and coloured status cells; columns that are blank in every row are left out
+(`export_table.py`, `/api/export`). The loading sheet's Excel uses the format the app reads back.
+
 ## Run on your computer (Windows)
 
 1. Install Python 3.10+ from python.org (tick "Add python.exe to PATH").

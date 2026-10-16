@@ -230,6 +230,10 @@
   .stat.good b { color: var(--ok); } .stat.bad b { color: var(--bad); }
   .stat.good { background: color-mix(in srgb, var(--ok) 4%, var(--card)); } .stat.bad { background: color-mix(in srgb, var(--bad) 4%, var(--card)); }
 
+  .bar-r { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bar-r .search { flex: 0 1 280px; }
+  .bar.c2 { margin-top: 0; }
+  .bar.c2 .lbl-t { color: var(--muted); font-size: 13px; }
   /* collapsible loading-sheet editor */
   .ed-toggle .chev { display: inline-block; transition: transform .25s; }
   #editor.collapsed .ed-toggle .chev { transform: rotate(-90deg); }
@@ -534,7 +538,8 @@
       <div class="dl">
         <button type="button" class="btn sm ghost ed-toggle" id="ed-toggle" aria-expanded="true" aria-controls="ed-wrap"><span class="chev">▾</span><span id="ed-toggle-t">Hide rows</span></button>
         <button type="button" class="btn sm ghost" id="ed-reset">↺ Reset</button>
-        <button type="button" class="btn sm ghost" id="ed-save">⬇ Save as Excel</button>
+        <button type="button" class="btn sm ghost" id="ed-save" title="Loading sheet as Excel, in the format the app reads back">⬇ Excel</button>
+        <button type="button" class="btn sm ghost" data-export="sheet" data-fmt="pdf" title="Loading sheet as PDF">⬇ PDF</button>
         <button type="button" class="btn sm" id="ed-check"><span class="spin"></span>Run check</button>
       </div>
     </div>
@@ -577,7 +582,7 @@
         <button type="button" class="btn sm ghost" id="gp-all">Ungroup all</button></div>
       <div class="gp-list" id="gp-list"></div>
     </section>
-    <div class="bar"><div class="filters" id="filters"></div><input class="search" id="q" type="search" placeholder="Search model or Sr no…"></div>
+    <div class="bar"><div class="filters" id="filters"></div><div class="bar-r"><input class="search" id="q" type="search" placeholder="Search model or Sr no…"><button type="button" class="btn sm ghost" data-export="t1" data-fmt="xlsx">⬇ Excel</button><button type="button" class="btn sm ghost" data-export="t1" data-fmt="pdf">⬇ PDF</button></div></div>
     <div class="table"><table>
       <colgroup><col style="width:4%"><col style="width:16%"><col style="width:5%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"></colgroup>
       <thead><tr><th title="Tick incorrect rows to match them by hand">✓</th><th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th class="n">Sheet</th><th class="n">Invoice</th><th class="n">Diff</th><th>Reason</th><th>Invoice Sr.</th></tr></thead>
@@ -599,7 +604,7 @@
     <h3 class="chk"><span class="num">1</span>Check 1 · Unit price — invoice rate vs master kg × Rate/kg</h3>
     <div id="gate"></div>
     <div class="stats" id="stats2"></div>
-    <div class="bar"><div class="filters" id="filters2"></div><input class="search" id="q2" type="search" placeholder="Search code, description, invoice…"></div>
+    <div class="bar"><div class="filters" id="filters2"></div><div class="bar-r"><input class="search" id="q2" type="search" placeholder="Search code, description, invoice…"><button type="button" class="btn sm ghost" data-export="t2" data-fmt="xlsx">⬇ Excel</button><button type="button" class="btn sm ghost" data-export="t2" data-fmt="pdf">⬇ PDF</button></div></div>
     <div class="table"><table>
       <colgroup><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:10%"><col style="width:20%"><col style="width:8%"><col style="width:5%"><col style="width:4%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:5%"></colgroup>
       <thead><tr>
@@ -611,6 +616,7 @@
     <p class="note"><i></i>Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
     <div id="check2" hidden>
       <h3 class="chk"><span class="num">2</span>Check 2 · Quantity — loading sheet vs invoice, in kg</h3>
+      <div class="bar c2"><span class="lbl-t">Per model: (invoice nos − sheet nos) × master kg/pc</span><div class="bar-r"><button type="button" class="btn sm ghost" data-export="t3" data-fmt="xlsx">⬇ Excel</button><button type="button" class="btn sm ghost" data-export="t3" data-fmt="pdf">⬇ PDF</button></div></div>
       <div class="table"><table>
         <colgroup><col style="width:16%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:18%"></colgroup>
         <thead><tr><th>Model</th><th>Status</th><th class="n">Sheet qty</th><th class="n">Invoice qty</th><th class="n">Diff</th><th class="n">Master kg/pc</th><th class="n">Effect (kg)</th><th>Group / note</th></tr></thead>
@@ -656,6 +662,7 @@ function modelKey(m) {
   return d ? [0, Number(d[0]), m.slice(d.index + d[0].length), m.slice(0, d.index), m] : [1, 0, "", m, m];
 }
 const byModel = (a, b) => { const x = modelKey(a), y = modelKey(b); for (let k = 0; k < x.length; k++) { if (x[k] < y[k]) return -1; if (x[k] > y[k]) return 1; } return 0; };
+const shown = {};   // rows each results table currently shows, for its Excel / PDF download
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const say = (t, err) => {   // Step 1 messages show in the card and, once it is open, in the editor
   for (const id of ["msg", "ed-msg"]) { $(id).className = err ? "msg err" : "msg"; $(id).textContent = t; }
@@ -1157,6 +1164,7 @@ function render(animate = true) {
   const rows = d.rows.map((r, i) => ({ r, i })).filter(({ r }) => filter === "ALL" || r.result === filter)
     .filter(({ r }) => !needle || [r.sheet_model, r.invoice_model, r.sheet_lines, r.invoice_lines, r.status, r.group, r.note, r.suggest].join(" ").toLowerCase().includes(needle))
     .sort((a, b) => byModel(a.r.model || a.r.invoice_model || a.r.sheet_model, b.r.model || b.r.invoice_model || b.r.sheet_model));
+  shown.t1 = rows.map(({ r }) => r);
   $("rows").innerHTML = rows.length ? rows.map(({ r, i }, n) => `
     <tr class="${r.check ? "check " : ""}${ROWCLS[r.result]}${picked.has(i) ? " sel" : ""}" style="animation-delay:${animate ? Math.min(n, 30) * 18 : 0}ms">
       <td class="pick" data-l="Pick">${r.result === "INCORRECT" ? `<input type="checkbox" data-i="${i}" ${picked.has(i) ? "checked" : ""} aria-label="Pick row ${esc(r.sheet_model || r.invoice_model)} for a manual match">` : ""}</td>
@@ -1243,6 +1251,7 @@ function renderWeight() {
     ? `<div class="gate bad">⚠ ${s.price_issues} model${s.price_issues > 1 ? "s have" : " has"} a unit price that does not match the master (${sg(s.price_kg)} kg). Resolve these first — Check 2 assumes the master weights.</div>`
     : `<div class="gate ok">✔ Unit prices match the master for every model — Check 2 below explains the variance.</div>`;
   const ms = [...w.models].filter(m => m.master_kg != null).sort((a, b) => byModel(a.model, b.model));
+  shown.t3 = ms;
   $("wrows").innerHTML = ms.map((m, n) => `
     <tr class="${m.qty_status === "OK" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(n, 30) * 15}ms">
       <td class="mono" data-l="Model">${esc(m.model)}</td>
@@ -1284,6 +1293,7 @@ function render2(animate = true) {
   const needle = q2.toLowerCase();
   const rows = rc.rows.filter(r => filter2 === "ALL" || r.result === filter2)
     .filter(r => !needle || [r.code, r.desc, r.invoice_no, r.sr, r.status, r.matched_by].join(" ").toLowerCase().includes(needle));
+  shown.t2 = rows;
   $("rows2").innerHTML = rows.length ? rows.map((r, i) => `
     <tr class="${r.check ? "check " : ""}${r.result === "CORRECT" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(i, 30) * 18}ms">
       <td data-l="Result"><span class="pill ${r.result === "CORRECT" ? "OK" : "BAD"}">${r.result}</span></td>
@@ -1299,6 +1309,75 @@ function render2(animate = true) {
   syncTabs();
 }
 $("q2").addEventListener("input", e => { q2 = e.target.value; render2(false); });
+
+// ---------------- every table: download as Excel or PDF (what it shows, with filter / search applied)
+function loadInfo() {
+  if (!data) return "";
+  return data.invoices.map(i => `Invoice ${i.invoice_no} (${i.date})`).join(" + ") + (data.invoices[0]?.recipient ? ` · ${data.invoices[0].recipient}` : "");
+}
+const filterNote = (f, qq) => [f && f !== "ALL" ? `filter: ${f.toLowerCase()}` : "", qq ? `search: "${qq}"` : ""].filter(Boolean).join(", ");
+const stamp = () => new Date().toISOString().slice(0, 10);
+function tableSpec(key) {
+  if (key === "sheet") {
+    if (!sheet) throw new Error("Read the loading sheet first");
+    const rows = sheet.rows.filter(r => r.model || r.qty);
+    const total = rows.reduce((t, r) => t + (Number(r.qty) || 0), 0);
+    return { title: "Loading sheet", sheet: "Loading sheet", filename: `loading_sheet_${stamp()}`,
+      subtitle: `${sheet.file.name} · ${rows.length} rows · total ${total.toLocaleString("en-IN")} pcs${sheetEdits() ? ` · ${sheetEdits()} change(s) made on the page` : ""}`,
+      columns: [{ name: "Sr No", type: "int" }, { name: "Model", type: "text" }, { name: "Qty", type: "int" }],
+      rows: [...rows.map((r, i) => [i + 1, r.model, Number(r.qty) || 0]), ["", "TOTAL", total]] };
+  }
+  if (key === "t1") {
+    if (!data) throw new Error("Run the check first");
+    const rows = shown.t1 || [], note = filterNote(filter, q);
+    return { title: "Loading sheet vs invoices", sheet: "Loading sheet vs invoices", filename: `loading_sheet_vs_invoices_${stamp()}`,
+      subtitle: [loadInfo(), `sheet ${data.sheet_total} pcs vs invoices ${data.invoice_total} pcs`, note].filter(Boolean).join(" · "),
+      columns: [{ name: "Result", type: "status" }, { name: "Sheet line", type: "text" }, { name: "Sheet model", type: "text" },
+        { name: "Invoice model", type: "text" }, { name: "Sheet qty", type: "int" }, { name: "Invoice qty", type: "int" },
+        { name: "Diff (inv - sheet)", type: "int" }, { name: "Reason", type: "text" }, { name: "Group", type: "text" },
+        { name: "Group net", type: "int" }, { name: "Note", type: "text" }, { name: "Possible match", type: "text" }, { name: "Invoice Sr. Nos", type: "text" }],
+      rows: rows.map(r => [r.result, r.sheet_lines ?? r.line, r.sheet_model, r.invoice_model, r.sheet_qty, r.invoice_qty, r.diff,
+        r.status, r.group || "", r.group ? r.group_net : "", r.note || "", r.suggest || "", r.invoice_lines]) };
+  }
+  if (key === "t2") {
+    if (!rc) throw new Error("Add the mastersheet and today's rate, then Run check");
+    const rows = shown.t2 || [], note = filterNote(filter2, q2);
+    return { title: "Check 1 · Unit price — invoice rate vs master kg × Rate/kg", sheet: "Check 1 unit price", filename: `check1_unit_price_${stamp()}`,
+      subtitle: [loadInfo(), `Rate ${Number(rc.summary.rate_per_kg).toFixed(2)} / kg`, "match: invoice kg/pc = master kg/pc (2 decimals)", note].filter(Boolean).join(" · "),
+      columns: [{ name: "Result", type: "status" }, { name: "Reason", type: "text" }, { name: "Invoice / Sr", type: "text" }, { name: "Item code", type: "text" },
+        { name: "Description", type: "text" }, { name: "Matched by", type: "text" }, { name: "Master kg/pc", type: "kgpc" }, { name: "Qty", type: "int" },
+        { name: "Expected (Rs)", type: "money" }, { name: "Invoice (Rs)", type: "money" }, { name: "Diff (Rs)", type: "money" }, { name: "Invoice kg/pc", type: "kgpc" }],
+      rows: rows.map(r => [r.result, r.status, `${r.invoice_no} / ${r.sr}`, r.code, r.desc, r.matched_by, r.kg, r.qty,
+        r.expected_rate, r.invoice_rate, r.diff, r.invoice_kg]) };
+  }
+  if (key === "t3") {
+    if (!rc || !rc.weight) throw new Error("Run the check with the mastersheet and today's rate first");
+    const s = rc.weight.summary, rows = shown.t3 || [];
+    return { title: "Check 2 · Quantity — loading sheet vs invoice, in kg", sheet: "Check 2 quantity", filename: `check2_quantity_kg_${stamp()}`,
+      subtitle: [loadInfo(), `loaded ${kgf(s.loaded_kg)} kg · billed ${kgf(s.billed_kg)} kg · variance ${s.variance_kg > 0 ? "+" : ""}${kgf(s.variance_kg)} kg (Check 1 ${kgf(s.price_kg)} + Check 2 ${kgf(s.qty_kg)} kg)`].filter(Boolean).join(" · "),
+      columns: [{ name: "Model", type: "text" }, { name: "Status", type: "status" }, { name: "Sheet qty", type: "int" }, { name: "Invoice qty", type: "int" },
+        { name: "Diff", type: "int" }, { name: "Master kg/pc", type: "kgpc" }, { name: "Effect (kg)", type: "kg" }, { name: "Group / note", type: "text" }],
+      rows: [...rows.map(m => [m.model, m.qty_status, m.sheet_qty, m.invoice_qty, m.qty_diff, m.master_kg, m.qty_kg, [m.group, m.note].filter(Boolean).join(" · ")]),
+        ["TOTAL", "", rows.reduce((t, m) => t + m.sheet_qty, 0), rows.reduce((t, m) => t + m.invoice_qty, 0), "", "", s.qty_kg, ""]] };
+  }
+  throw new Error("Unknown table");
+}
+async function exportTable(btn) {
+  const key = btn.dataset.export, fmt = btn.dataset.fmt, label = btn.textContent;
+  try {
+    const spec = tableSpec(key);
+    btn.disabled = true; btn.textContent = "Preparing…";
+    const r = await fetch("/api/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ format: fmt, spec }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Server error (${r.status})`);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await r.blob());
+    a.download = `${spec.filename}.${fmt}`;
+    a.click();
+  } catch (err) {
+    toast(err.message);
+  } finally { btn.disabled = false; btn.textContent = label; }
+}
+document.addEventListener("click", e => { const b = e.target.closest("button[data-export]"); if (b) exportTable(b); });
 </script>
 </body>
 </html>

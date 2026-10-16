@@ -16,6 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from invoice_parser import combine_invoices, read_invoice  # noqa: E402
+from export_table import to_pdf, to_xlsx  # noqa: E402
 from loading_sheet_excel import read_sheet_excel, write_template  # noqa: E402
 from loading_sheet_ocr import read_sheet  # noqa: E402
 from rate_check import ordered, run_on_step1, write_excel, write_pdf  # noqa: E402
@@ -102,6 +103,22 @@ def sheet_excel():
     return buf.getvalue(), 200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": 'attachment; filename="loading_sheet.xlsx"'}
+
+
+@app.post("/api/export")
+def export():
+    """Any table on the page as Excel or PDF: body {"format": "xlsx" | "pdf", "spec": {...}} (see export_table)."""
+    body = request.get_json(silent=True) or {}
+    fmt, spec = body.get("format"), body.get("spec") or {}
+    if fmt not in ("xlsx", "pdf"):
+        return jsonify(error="format must be xlsx or pdf"), 400
+    try:
+        data = to_xlsx(spec) if fmt == "xlsx" else to_pdf(spec)
+    except ValueError as e:
+        return jsonify(error=str(e)), 422
+    name = "".join(ch if ch.isalnum() or ch in "-_ " else "_" for ch in (spec.get("filename") or "table")).strip() or "table"
+    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if fmt == "xlsx" else "application/pdf"
+    return data, 200, {"Content-Type": mime, "Content-Disposition": f'attachment; filename="{name}.{fmt}"'}
 
 
 @app.post("/api/reconcile")
