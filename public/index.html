@@ -1262,8 +1262,8 @@ function renderWeight() {
       <td data-l="Group / note">${esc([m.group, m.note].filter(Boolean).join(" · "))}</td>
     </tr>`).join("");
   const nim = s.sheet_not_in_master;
-  $("nim").innerHTML = nim.length ? `<div class="nim">Loading sheet models <b>not in the master sheet</b> — no weight, so left out of the loaded kg (listed in the Excel "Master sheet (loaded)" tab):
-    ${[...nim].sort((a, b) => byModel(a.model, b.model)).map(m => `<b>${esc(m.model)}</b> × ${m.sheet_qty}`).join(" · ")}</div>` : "";
+  $("nim").innerHTML = nim.length ? `<div class="nim">Loading sheet models <b>not in the master sheet</b> — weighed with the invoice kg/pc (rate ÷ Rate/Kg; a similar billed model's when not billed), so their unit price is not checked (listed in the Excel "Master sheet (loaded)" tab):
+    ${[...nim].sort((a, b) => byModel(a.model, b.model)).map(m => `<b>${esc(m.model)}</b> × ${m.sheet_qty}${m.master_kg == null ? " (no weight)" : ` @ ${kgpc(m.master_kg)}${m.kg_source && m.kg_source !== "invoice" ? ` from ${esc(m.kg_source.replace("invoice ", ""))}` : ""}`}`).join(" · ")}</div>` : "";
 }
 
 function render2(animate = true) {

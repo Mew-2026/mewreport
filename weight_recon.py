@@ -5,20 +5,34 @@
   Variance      = billed - loaded, split exactly into
     Check 1  unit price / weight :  invoice qty x (invoice kg/pc - master kg/pc)   per model
     Check 2  quantity            :  (invoice qty - sheet qty) x master kg/pc        per model
-    + billed kg of invoice models that have no master weight
+    + billed kg of models with no weight at all (not in master, and nothing billed to take a weight from)
+
+A model missing from the master is weighed with its invoice kg/pc (rate / Rate per kg), so its loaded pcs
+still count; when it was not billed, the invoice kg/pc of its manual-match partner or of the closest billed
+model (same Pro / non-Pro) is used. Its unit price cannot be checked, so Check 1 is 0 for it.
 
 Works on the Step 1 rows (reconcile.reconcile, one row per model) and the parsed invoice lines, so
 nothing is read again.
 """
 from collections import Counter, defaultdict
 
+from rapidfuzz import fuzz
+
 from invoice_parser import model_sort_key
 from mastersheet import code_key
+from reconcile import SUGGEST_SCORE
 
 
 def _model_kgs(master, model):
     """kg/pc of master rows whose description gives this model (most common first)."""
     return [k for k, _ in Counter(m["kg"] for m in master["rows"] if m["model"] == model).most_common()]
+
+
+def _similar(key, candidates):
+    """Closest billed model to weigh an unbilled model that is not in the master; Pro only with Pro."""
+    pro = key.endswith("P")
+    best = max(((fuzz.ratio(key, c), c) for c in candidates if c != key and c.endswith("P") == pro), default=(0, None))
+    return best[1] if best[0] >= SUGGEST_SCORE else None
 
 
 def weight_recon(recon_rows, inv, master, rate_per_kg):
@@ -28,6 +42,17 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
     lines_by_model = defaultdict(list)
     for l in inv["lines"]:
         lines_by_model[l["model"]].append(l)
+    # invoice kg/pc per billed model (qty-weighted, each line's rate / Rate per kg to 2 dp)
+    inv_kg = {}
+    for mod, ls in lines_by_model.items():
+        priced = [l for l in ls if l.get("rate")]
+        if priced:
+            inv_kg[mod] = (sum(l["qty"] * round(l["rate"] / rate_per_kg, 2) for l in priced)
+                           / sum(l["qty"] for l in priced))
+    group_models = defaultdict(list)   # manual match group -> invoice models in it
+    for r in recon_rows:
+        if r.get("group") and r["invoice_model"]:
+            group_models[r["group"]].append(r["invoice_model"])
 
     models, not_in_master = [], []
     for r in recon_rows:
@@ -40,10 +65,20 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
             line_kg.append((l, m_["kg"] if m_ else (fallback[0] if fallback else None)))
         known_lines = [(l, k) for l, k in line_kg if k is not None]
         sq, iq = r["sheet_qty"], r["invoice_qty"]
+        source = "master"
         if known_lines:
             kg = sum(l["qty"] * k for l, k in known_lines) / sum(l["qty"] for l, _ in known_lines)
-        else:
-            kg = fallback[0] if fallback else None
+        elif fallback:
+            kg = fallback[0]
+        else:   # not in the master: weigh with the invoice kg/pc instead of leaving the pcs out
+            kg, source = None, None
+            if r["invoice_model"] in inv_kg:
+                kg, source = inv_kg[r["invoice_model"]], "invoice"
+            else:
+                partner = next((g for g in group_models.get(r.get("group"), []) if g in inv_kg), None) \
+                    or _similar(key, inv_kg)
+                if partner:
+                    kg, source = inv_kg[partner], f"invoice {partner}"
         kgs = sorted({round(k, 4) for _, k in known_lines} | set(fallback if not known_lines else []))
         priced = [(l, k) for l, k in line_kg if l.get("rate")]
         billed = sum(l["qty"] * round(l["rate"] / rate_per_kg, 2) for l, _ in priced)   # kg/pc to 2 dp, like the master
@@ -51,7 +86,7 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
         m = {"model": key, "sheet_model": r["sheet_model"], "sheet_lines": r.get("sheet_lines", ""),
              "sheet_qty": sq, "invoice_qty": iq, "qty_diff": iq - sq, "group": r.get("group", ""),
              "master_kg": kg, "master_kgs": kgs, "invoice_kg": billed / pq if pq else None, "billed_kg": billed,
-             "loaded_kg": None, "price_kg": None, "qty_kg": None,
+             "kg_source": source, "loaded_kg": None, "price_kg": None, "qty_kg": None,
              "master_price": kg * rate_per_kg if kg else None,
              "invoice_price": sum(l["qty"] * l["rate"] for l, _ in priced) / pq if pq else None}
         if kg is None:
@@ -64,14 +99,19 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
             m["price_kg"] = billed - iq * kg   # = sum over lines of qty x (invoice kg - its code's kg); keeps the split exact
             # unit price: each line's billed kg/pc (2 dp) against its own item code's master kg/pc; worst line decides
             gaps = [round(l["rate"] / rate_per_kg, 2) - round(k, 2) for l, k in priced if k]
-            if not gaps:
+            if source != "master":
+                m["price_status"] = "NOT IN MASTER"
+                m["note"] = (f"not in master - weighed at {kg:.2f} kg/pc from the "
+                             + ("invoice rate" if source == "invoice" else f"invoice rate of {source[8:]} (similar model)"))
+                not_in_master.append(m)
+            elif not gaps:
                 m["price_status"] = "NOT BILLED"
             else:
                 worst = max(gaps, key=abs)
                 m["kgpc_gap"] = round(worst, 2)
                 m["price_status"] = "OK" if abs(worst) < 0.005 else ("PRICE HIGH" if worst > 0 else "PRICE LOW")
             m["qty_status"] = "OK" if iq == sq else ("MORE BILLED" if iq > sq else "LESS BILLED")
-            if len(kgs) > 1:
+            if source == "master" and len(kgs) > 1:
                 m["note"] = (f"item codes weigh {', '.join(f'{x:g}' for x in kgs)} kg - each invoice line uses its own; "
                              f"{kg:.2f} kg/pc average used for the sheet qty")
         models.append(m)
@@ -81,7 +121,7 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
     billed = sum(m["billed_kg"] for m in models)
     price = sum(m["price_kg"] for m in known)
     qty = sum(m["qty_kg"] for m in known)
-    unknown_billed = sum(m["billed_kg"] for m in not_in_master)
+    unknown_billed = sum(m["billed_kg"] for m in models if m["master_kg"] is None)
     # whole kg everywhere; the quantity part takes up any 1 kg rounding so the parts always add up on paper
     loaded_r, billed_r, price_r, nim_r = round(loaded), round(billed), round(price), round(unknown_billed)
     summary = {
@@ -93,7 +133,7 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
         "price_issues": sum(m["price_status"] in ("PRICE HIGH", "PRICE LOW") for m in models),
         "qty_issues": sum(m["qty_status"] in ("MORE BILLED", "LESS BILLED") for m in models),
         "not_in_master": len(not_in_master),
-        "sheet_not_in_master": [m for m in not_in_master if m["sheet_qty"]],
+        "sheet_not_in_master": [m for m in not_in_master if m["sheet_qty"]],   # weighed from the invoice, or not at all
     }
     # the parts must add up to the variance; anything else is a bug
     assert abs((price + qty + unknown_billed) - (billed - loaded)) < 0.01, "weight split does not add up"
@@ -165,7 +205,7 @@ def add_weight_sheets(wb, w, master):
     ms.append(["Item code", "Material description", "weight (kg)", "Loaded qty (nos)", "Loaded kg", "Model"])
     for c in ms[1]:
         c.font = bold
-    loaded = {m["model"]: m for m in w["models"] if m["master_kg"] is not None and m["sheet_qty"]}
+    loaded = {m["model"]: m for m in w["models"] if m["kg_source"] == "master" and m["sheet_qty"]}
     done = set()
     for r in master["rows"]:
         m = loaded.get(r["model"])
@@ -184,11 +224,12 @@ def add_weight_sheets(wb, w, master):
     ms.append([])
     ms.append(["Loading sheet models NOT found in the master sheet (review)"])
     ms.cell(ms.max_row, 1).font = Font(bold=True, size=12)
-    ms.append(["Model", "Written on sheet", "Sheet line", "Qty (nos)"])
+    ms.append(["Model", "Written on sheet", "Sheet line", "Qty (nos)", "kg/pc used", "Loaded kg", "Weight from"])
     for c in ms[ms.max_row]:
         c.font = bold
     for m in sorted(w["summary"]["sheet_not_in_master"], key=lambda m: model_sort_key(m["model"])):
-        ms.append([m["model"], m["sheet_model"], m["sheet_lines"], m["sheet_qty"]])
+        ms.append([m["model"], m["sheet_model"], m["sheet_lines"], m["sheet_qty"], m["master_kg"],
+                   round(m["loaded_kg"], 2) if m["loaded_kg"] is not None else None, m["kg_source"] or "no weight"])
         ms.cell(ms.max_row, 4).fill = amber
     for col, wd in zip("ABCDEF", [18, 46, 12, 16, 12, 14]):
         ms.column_dimensions[col].width = wd

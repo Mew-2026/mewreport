@@ -39,7 +39,11 @@ and produces an Excel reconciliation report.
    - **Check 1, unit price** (first): an invoice line matches when its kg/pc (2 decimals) equals its item
      code's master kg/pc - no tolerance; differences shown in kg,
    - **Check 2, quantity**: (invoice nos - sheet nos) x master kg/pc per model,
-   - plus billed kg of invoice models with no master weight.
+   - plus billed kg of models with no weight at all.
+   A model **not in the master** is weighed with its invoice kg/pc (rate / Rate/Kg), so its loaded pcs still
+   count in the loaded kg (otherwise the variance swings by their whole weight). When it was not billed, the
+   invoice kg/pc of its manual-match partner, or else the closest billed model (Pro only with Pro), is used.
+   Its unit price cannot be checked, so Check 1 is 0 for it and its difference falls in Check 2.
    kg and rupee figures are whole numbers (kg/pc and Rs/kg keep 2 decimals); the quantity part absorbs
    any 1 kg rounding so the parts always add up. One model can have several item codes with different
    weights: each invoice line uses its own. Manual matches re-run the weight check automatically.

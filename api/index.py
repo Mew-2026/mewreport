@@ -217,9 +217,9 @@ def _json_weight(w):
     r2 = lambda v: None if v is None else round(v, 2)
     keys = ("model", "sheet_model", "sheet_lines", "sheet_qty", "invoice_qty", "qty_diff", "group", "master_kg",
             "invoice_kg", "billed_kg", "loaded_kg", "price_kg", "qty_kg", "master_price", "invoice_price",
-            "kgpc_gap", "price_status", "qty_status", "note")
+            "kgpc_gap", "price_status", "qty_status", "note", "kg_source")
     models = [{k: (r2(m.get(k)) if isinstance(m.get(k), float) else m.get(k)) for k in keys} for m in w["models"]]
     s = {k: v for k, v in w["summary"].items() if k != "sheet_not_in_master"}
-    s["sheet_not_in_master"] = [{k: m[k] for k in ("model", "sheet_model", "sheet_lines", "sheet_qty")}
+    s["sheet_not_in_master"] = [{k: m[k] for k in ("model", "sheet_model", "sheet_lines", "sheet_qty", "master_kg", "kg_source")}
                                 for m in w["summary"]["sheet_not_in_master"]]
     return {"summary": s, "models": models}
