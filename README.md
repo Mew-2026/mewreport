@@ -20,8 +20,10 @@ and produces an Excel reconciliation report.
    (`invoice_parser.py`).
    On the Step 1 result, incorrect rows can be **matched by hand**: tick any rows (they need not be
    next to each other), add an optional note, and group them. A group whose differences add up to 0
-   becomes MATCHED; otherwise PARTLY MATCHED, showing the difference left. Groups can be undone; the
-   Excel report (and Step 2's combined report) lists them with their net difference and note.
+   becomes MATCHED; otherwise PARTLY MATCHED, showing the difference left. Mistakes are cheap to fix:
+   a *Manual matches* panel lists every group with *Ungroup* (and *Ungroup all*), a single row can be
+   taken out of its group, and every change offers *Undo*. Nothing is re-read, so no credits are spent.
+   The Excel report (and Step 2's combined report) lists the groups with their net difference and note.
 3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
    tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
 

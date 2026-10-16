@@ -264,6 +264,36 @@
          border-radius: 99px; border: 1px solid var(--line2); background: var(--card); color: var(--text); vertical-align: middle; }
   .grp button { width: 20px; height: 20px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; border-radius: 99px; }
   .grp button:hover { background: var(--bad-bg); color: var(--bad); }
+  .grp button.txt { width: auto; padding: 0 8px; font-size: 11px; font-weight: 700; }
+  .rm { display: inline-flex; align-items: center; height: 22px; margin-left: 6px; padding: 0 8px; border: 1px dashed var(--line2); border-radius: 99px;
+        background: transparent; color: var(--muted); font: 600 11px Inter, system-ui, sans-serif; cursor: pointer; vertical-align: middle; }
+  .rm:hover { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
+  /* manual matches panel: every group with its rows, net and an Ungroup button */
+  .gpanel { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--man); border-radius: var(--radius);
+            box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 16px; animation: rise .35s ease both; }
+  .gpanel[hidden] { display: none; }
+  .gp-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .gp-h b { font-size: 15px; }
+  .gp-h span { color: var(--muted); font-size: 13px; margin-left: 8px; font-weight: 500; }
+  .gp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 10px; }
+  .gitem { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 12px; padding: 10px 12px;
+           border: 1px solid var(--line); border-radius: 12px; background: var(--card2); animation: pop .3s ease both; }
+  .gitem .gid { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 13px;
+                background: var(--man-bg); color: var(--man); border: 1px solid var(--man-line); }
+  .gitem.part .gid { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+  .gitem .gbody { min-width: 0; }
+  .gitem .gtop { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .gitem .grows { font-size: 12.5px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+  .gitem .grows b { color: var(--text); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  .gitem .gn { font-size: 12px; font-weight: 750; color: var(--muted); }
+  .gitem .gnote2 { font-size: 12px; color: var(--muted); font-style: italic; }
+  /* toast with Undo after ungrouping */
+  .toast { position: fixed; left: 50%; bottom: 18px; z-index: 40; transform: translate(-50%, 160%); display: flex; align-items: center; gap: 14px;
+           padding: 10px 12px 10px 16px; border-radius: 12px; background: #0b1b33; color: #fff; box-shadow: var(--shadow-lg); font-size: 14px;
+           transition: transform .3s cubic-bezier(.2, .8, .2, 1); max-width: calc(100% - 24px); }
+  .toast.on { transform: translate(-50%, 0); }
+  body.selecting .toast { bottom: 110px; }
+  .toast button { height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--sky); color: #0b2545; font: 700 13px Inter, system-ui, sans-serif; cursor: pointer; }
   .gnet { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
   .gnote { display: block; font-size: 11.5px; color: var(--muted); font-style: italic; margin-top: 3px; }
   .reason { font-size: 12.5px; color: var(--muted); text-transform: capitalize; }
@@ -504,6 +534,11 @@
       <div class="dl"><a class="btn sm" id="dl" download>⬇ Excel report</a></div>
     </div>
     <div class="stats" id="stats"></div>
+    <section class="gpanel" id="gpanel" hidden aria-label="Manual matches">
+      <div class="gp-h"><div><b>Manual matches</b><span id="gp-count"></span></div>
+        <button type="button" class="btn sm ghost" id="gp-all">Ungroup all</button></div>
+      <div class="gp-list" id="gp-list"></div>
+    </section>
     <div class="bar"><div class="filters" id="filters"></div><input class="search" id="q" type="search" placeholder="Search model or Sr no…"></div>
     <div class="table"><table>
       <colgroup><col style="width:4%"><col style="width:16%"><col style="width:5%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"></colgroup>
@@ -533,6 +568,7 @@
   </section>
 </main>
 
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-t"></span><button type="button" id="toast-undo">Undo</button></div>
 <div class="selbar" id="selbar" role="region" aria-label="Manual match">
   <span class="sum" id="sel-sum"></span><span class="parts" id="sel-parts"></span><span class="net" id="sel-net"></span>
   <input id="sel-note" type="text" maxlength="200" placeholder="Note (optional) — why these rows belong together">
@@ -871,7 +907,7 @@ $("f").addEventListener("submit", async e => {
     fd.append("sheet_meta", JSON.stringify({ source: sheet.source + (sheetEdits() ? " (checked & edited)" : " (checked)"), strips: sheet.strips }));
     fd.append("invoices", JSON.stringify(invoices));
     lastCheck = { sheet_rows: fd.get("sheet_rows"), sheet_meta: fd.get("sheet_meta"), invoices: fd.get("invoices") };
-    groups = []; picked.clear();
+    groups = []; picked.clear(); $("toast").classList.remove("on");
     data = await post("/api/reconcile", fd); filter = "ALL"; q = ""; $("q").value = "";
     render(); download(); showSource();
     $("result").scrollIntoView({ behavior: "smooth" });
@@ -919,16 +955,68 @@ async function regroup(msg) {
     throw err;
   } finally { $("sel-go").querySelector(".spin").style.display = ""; selbar(); }
 }
-$("sel-go").addEventListener("click", async () => {
-  const idx = [...picked];
-  groups.push({ rows: idx, note: $("sel-note").value.trim() });
-  try { await regroup(`Group G${groups.length} saved — Excel report updated.`); } catch { groups.pop(); }
+$("sel-go").addEventListener("click", () => {   // grouped the wrong rows? the toast offers Undo
+  const next = [...groups, { rows: [...picked], note: $("sel-note").value.trim() }];
+  changeGroups(next, `Group G${next.length} saved — Excel report updated.`);
 });
 $("sel-clear").addEventListener("click", () => { picked.clear(); render(false); });
-function ungroup(g) {   // "G2" -> remove that group; later groups are renumbered by the server
-  const n = Number(g.slice(1)) - 1, removed = groups.splice(n, 1);
-  regroup(`${g} removed — rows back to incorrect.`).catch(() => groups.splice(n, 0, ...removed));
+// ---- undoing mistakes: ungroup one group, all groups, or take a single row out of its group (no credits, instant)
+let toastTimer = null;
+function toast(text, undo) {
+  $("toast-t").textContent = text;
+  $("toast-undo").hidden = !undo;
+  $("toast-undo").onclick = async () => { $("toast").classList.remove("on"); if (undo) await undo(); };
+  $("toast").classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("on"), 8000);
 }
+async function changeGroups(next, msg) {   // apply a new set of groups; offer Undo back to the previous one
+  const before = groups.map(g => ({ rows: [...g.rows], note: g.note }));
+  groups = next;
+  try {
+    await regroup(msg);
+    toast(msg, async () => { groups = before; await regroup("Undone — groups restored."); });
+  } catch { groups = before; }
+}
+const gIndex = g => Number(String(g).slice(1)) - 1;   // "G2" -> 1 (the server numbers groups in order)
+function ungroup(g) {
+  changeGroups(groups.filter((_, k) => k !== gIndex(g)), `${g} ungrouped — its rows are back to incorrect.`);
+}
+function ungroupAll() {
+  if (groups.length) changeGroups([], `All ${groups.length} group${groups.length > 1 ? "s" : ""} ungrouped.`);
+}
+function removeFromGroup(i) {   // one row out; a group left with fewer than 2 rows is dissolved
+  const k = groups.findIndex(g => g.rows.includes(i)); if (k < 0) return;
+  const model = data.rows[i].sheet_model || data.rows[i].invoice_model;
+  const next = groups.map(g => ({ rows: g.rows.filter(x => x !== i), note: g.note })).filter(g => g.rows.length >= 2);
+  const msg = next.length < groups.length ? `${model} removed — G${k + 1} had one row left, so it was ungrouped.`
+                                           : `${model} removed from G${k + 1}.`;
+  changeGroups(next, msg);
+}
+$("gp-all").addEventListener("click", ungroupAll);
+
+function groupsPanel() {
+  const by = {};
+  data.rows.forEach((r, i) => { if (r.group) (by[r.group] = by[r.group] || []).push({ r, i }); });
+  const ids = Object.keys(by).sort((a, b) => gIndex(a) - gIndex(b));
+  $("gpanel").hidden = !ids.length;
+  if (!ids.length) return;
+  $("gp-count").textContent = `${ids.length} group${ids.length > 1 ? "s" : ""} · undo any of them below`;
+  $("gp-list").innerHTML = ids.map(g => {
+    const rows = by[g], first = rows[0].r, part = first.result === "PARTLY MATCHED";
+    return `<div class="gitem${part ? " part" : ""}">
+      <div class="gid">${esc(g)}</div>
+      <div class="gbody">
+        <div class="gtop"><span class="pill ${PILL[first.result]}">${first.result}</span>
+          <span class="gn">net ${first.group_net > 0 ? "+" : ""}${first.group_net}</span>
+          ${first.note ? `<span class="gnote2">“${esc(first.note)}”</span>` : ""}</div>
+        <div class="grows">${rows.map(({ r }) => `<b>${esc(r.sheet_model || r.invoice_model)}</b> ${r.diff > 0 ? "+" : ""}${r.diff}`).join(" · ")}</div>
+      </div>
+      <button type="button" class="btn sm ghost" data-ug="${esc(g)}">Ungroup</button>
+    </div>`;
+  }).join("");
+}
+$("gp-list").addEventListener("click", e => { const b = e.target.closest("button[data-ug]"); if (b) ungroup(b.dataset.ug); });
 
 function render(animate = true) {
   const d = data, count = s => d.rows.filter(r => r.result === s).length;
@@ -950,6 +1038,7 @@ function render(animate = true) {
     ]);
     $("stats").querySelectorAll("b[data-v]").forEach(countUp);
   }
+  groupsPanel();
   const tabs = [["ALL", "All", d.rows.length], ["INCORRECT", "Incorrect", count("INCORRECT")],
     ["PARTLY MATCHED", "Partly", part], ["MATCHED", "Matched", man], ["CORRECT", "Correct", count("CORRECT")]]
     .filter(([k, , n]) => n || ["ALL", "INCORRECT", "CORRECT"].includes(k) || k === filter);
@@ -962,7 +1051,7 @@ function render(animate = true) {
   $("rows").innerHTML = rows.length ? rows.map(({ r, i }, n) => `
     <tr class="${r.check ? "check " : ""}${ROWCLS[r.result]}${picked.has(i) ? " sel" : ""}" style="animation-delay:${animate ? Math.min(n, 30) * 18 : 0}ms">
       <td class="pick" data-l="Pick">${r.result === "INCORRECT" ? `<input type="checkbox" data-i="${i}" ${picked.has(i) ? "checked" : ""} aria-label="Pick row ${esc(r.sheet_model || r.invoice_model)} for a manual match">` : ""}</td>
-      <td data-l="Result"><span class="pill ${PILL[r.result]}">${r.result}</span>${r.group ? `<span class="grp">${esc(r.group)}<button type="button" data-g="${esc(r.group)}" title="Unmatch ${esc(r.group)}" aria-label="Unmatch ${esc(r.group)}">×</button></span>` : ""}${r.note ? `<span class="gnote">${esc(r.note)}</span>` : ""}</td>
+      <td data-l="Result"><span class="pill ${PILL[r.result]}">${r.result}</span>${r.group ? `<span class="grp">${esc(r.group)}<button type="button" class="txt" data-g="${esc(r.group)}" title="Ungroup ${esc(r.group)}: all its rows go back to incorrect">Ungroup</button></span><button type="button" class="rm" data-rm="${i}" title="Take only this row out of ${esc(r.group)}">Remove row</button>` : ""}${r.note ? `<span class="gnote">${esc(r.note)}</span>` : ""}</td>
       <td data-l="Line">${esc(r.line)}</td>
       <td class="m mono" data-l="Sheet model">${esc(r.sheet_model)}</td><td class="m mono" data-l="Invoice model">${esc(r.invoice_model)}</td>
       <td class="n" data-l="Sheet">${r.sheet_qty}</td><td class="n" data-l="Invoice">${r.invoice_qty}</td>
@@ -979,9 +1068,10 @@ $("rows").addEventListener("change", e => {
   e.target.closest("tr").classList.toggle("sel", e.target.checked);
   selbar();
 });
-$("rows").addEventListener("click", e => {
-  const g = e.target.closest("button[data-g]");
-  if (g && confirm(`Unmatch ${g.dataset.g}? Its rows go back to incorrect.`)) ungroup(g.dataset.g);
+$("rows").addEventListener("click", e => {   // no confirm needed: every change can be undone from the toast
+  const g = e.target.closest("button[data-g]"), rm = e.target.closest("button[data-rm]");
+  if (g) ungroup(g.dataset.g);
+  else if (rm) removeFromGroup(Number(rm.dataset.rm));
 });
 $("q").addEventListener("input", e => { q = e.target.value; render(false); });
 
