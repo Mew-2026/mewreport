@@ -37,8 +37,8 @@ def model_key(desc):
         r"(ILT[TJ]\d{5})",
         r"BOOSTCHARGE(BC\d{5}(?:ST)?)",
         r"((?:PC|RC|EC|SC|LM|TC|TZ|NEO)\d{5}(?:STJ|TJ|ST|TT)?)",
-        # solar / other families: LPTT12135H, LPTT12150L, ASTT12150L, LPT1240H, UCTT25066, AP20048TT, AB18060 ...
-        r"((?:LPTT|ASTT|LPT|UCTT|BC|AP|AB)\d{4,5}(?:STJ|TJ|ST|TT|H|L)?)",
+        # solar / other families: LPTT12135H, LPTT12150L, ASTT12150L, LPT1240H, UCTT25066, ILST12042, AB18060 ...
+        r"((?:LPTT|ASTT|LPT|UCTT|ILST|BC|AP|AB)\d{4,5}(?:STJ|TJ|ST|TT|H|L)?)",
         r"(?<!\d)([2-5]\d{3}(?:STJ|TT|ST))",
         r"(ECOCHRG\d{5})",
     ]:
