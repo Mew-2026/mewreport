@@ -443,7 +443,7 @@
         <div class="col stack">
           <div>
             <div class="lbl-row"><label class="lbl" for="rate">Today's rate</label></div>
-            <div class="field"><input id="rate" type="number" step="0.01" min="0.01" inputmode="decimal"><span class="unit">Rs / Kg</span></div>
+            <div class="field"><input id="rate" type="number" step="0.01" min="0.01" inputmode="decimal" autocomplete="off"><span class="unit">Rs / Kg</span></div>
           </div>
           <div>
             <div class="lbl-row"><label class="lbl" for="tol">Tolerance</label></div>
@@ -985,11 +985,10 @@ let rc = null, filter2 = "ALL", q2 = "";
 const say2 = (t, err) => { $("msg2").className = err ? "msg err" : "msg"; $("msg2").textContent = t; };
 const money = v => v == null ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// remember the last rate and tolerance on this computer
+// today's rate always starts empty (it changes daily); only the tolerance is remembered on this computer
 try {
   const saved = JSON.parse(localStorage.getItem("ratecheck") || "{}");
-  if (saved.rate) $("rate").value = saved.rate;
-  if (saved.tol != null) $("tol").value = saved.tol;
+  if (saved.tol != null && saved.tol !== "") $("tol").value = saved.tol;
 } catch (e) {}
 
 function blobLink(id, b64, type, name) {
@@ -1027,7 +1026,7 @@ $("f2").addEventListener("submit", async e => {
     if (step1) fd.append("step1", step1);
     else fd.append("invoices", JSON.stringify(await readInvoices(say2)));
     say2("Checking rates…");
-    try { localStorage.setItem("ratecheck", JSON.stringify({ rate: $("rate").value, tol: $("tol").value })); } catch (e) {}
+    try { localStorage.setItem("ratecheck", JSON.stringify({ tol: $("tol").value })); } catch (e) {}
     fd.append("master", $("master").files[0]);
     fd.append("rate", $("rate").value);
     fd.append("tolerance", $("tol").value);
