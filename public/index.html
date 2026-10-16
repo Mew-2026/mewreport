@@ -195,6 +195,32 @@
   .pill { display: inline-block; padding: 3px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
   .pill.OK { background: var(--ok-bg); color: var(--ok); }
   .pill.BAD { background: var(--bad-bg); color: var(--bad); }
+  .pill.MAN { background: var(--check-bg); color: #1f5fa8; }
+  .pill.PART { background: var(--warn-bg); color: var(--warn); }
+  tr.man-row td:first-child { box-shadow: inset 3px 0 0 #2f7bd8; }
+  tr.part-row td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+  tr.sel { background: color-mix(in srgb, var(--accent) 9%, transparent) !important; }
+  td.pick { text-align: center; padding-left: 6px; padding-right: 6px; }
+  td.pick input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
+  .grp { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 11.5px; font-weight: 800; padding: 2px 4px 2px 8px;
+         border-radius: 99px; border: 1px solid var(--line); background: var(--card); color: var(--text); vertical-align: middle; }
+  .grp button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; padding: 1px 4px; border-radius: 99px; }
+  .grp button:hover { background: var(--bad-bg); color: var(--bad); }
+  .gnet { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .gnote { display: block; font-size: 11.5px; color: var(--muted); font-style: italic; margin-top: 2px; }
+  /* selection bar for manual matching */
+  .selbar { position: fixed; left: 50%; bottom: 18px; z-index: 30; transform: translate(-50%, 140%); width: min(980px, calc(100% - 24px));
+            display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: 16px;
+            background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow-lg); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+  .selbar.on { transform: translate(-50%, 0); }
+  body.selecting main { padding-bottom: 170px; }   /* the bar never hides the last rows */
+  .selbar .sum { font-weight: 700; font-size: 14px; }
+  .selbar .parts { font-size: 12.5px; color: var(--muted); flex: 1 1 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selbar .net { font-weight: 800; padding: 4px 10px; border-radius: 99px; font-size: 13px; white-space: nowrap; }
+  .selbar .net.zero { background: var(--ok-bg); color: var(--ok); }
+  .selbar .net.part { background: var(--warn-bg); color: var(--warn); }
+  .selbar input { flex: 1 1 220px; height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; font-size: 13px; }
+  .selbar input:focus { outline: none; border-color: var(--accent); }
   .reason { font-size: 12.5px; color: var(--muted); text-transform: capitalize; }
   tr.check td.m { background: var(--check-bg); }
   .note { color: var(--muted); font-size: 12.5px; margin-top: 10px; display: flex; gap: 8px; align-items: center; }
@@ -410,11 +436,11 @@
     <div class="stats" id="stats"></div>
     <div class="bar"><div class="filters" id="filters"></div><input class="search" id="q" type="search" placeholder="Search model or Sr no…"></div>
     <div class="table"><table>
-      <colgroup><col style="width:11%"><col style="width:6%"><col style="width:14%"><col style="width:14%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:13%"><col style="width:19%"></colgroup>
-      <thead><tr><th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th class="n">Sheet</th><th class="n">Invoice</th><th class="n">Diff</th><th>Reason</th><th>Invoice Sr.</th></tr></thead>
+      <colgroup><col style="width:4%"><col style="width:16%"><col style="width:5%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"></colgroup>
+      <thead><tr><th title="Tick incorrect rows to match them by hand">✓</th><th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th class="n">Sheet</th><th class="n">Invoice</th><th class="n">Diff</th><th>Reason</th><th>Invoice Sr.</th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
-    <p class="note"><i></i>Blue model cells: fuzzy pairing below 90% — check by eye. Compare the sheet total with the total written on the paper.</p>
+    <p class="note"><i></i>Blue model cells: fuzzy pairing below 90% — check by eye. Tick incorrect rows (anywhere in the list) to match them by hand: net 0 → MATCHED, otherwise PARTLY MATCHED with the difference left.</p>
   </section>
 
   <section id="result2" class="result">
@@ -436,6 +462,13 @@
     <p class="note"><i></i>Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
   </section>
 </main>
+
+<div class="selbar" id="selbar" role="region" aria-label="Manual match">
+  <span class="sum" id="sel-sum"></span><span class="parts" id="sel-parts"></span><span class="net" id="sel-net"></span>
+  <input id="sel-note" type="text" maxlength="200" placeholder="Note (optional) — why these rows belong together">
+  <button type="button" class="btn sm" id="sel-go"><span class="spin"></span><span id="sel-go-t">Mark as matched</span></button>
+  <button type="button" class="btn sm ghost" id="sel-clear">Clear</button>
+</div>
 
 <footer><img src="logo.svg" alt="">Mahesh Engineering Works · B-33 Bela Industrial Area, Phase 2, Muzaffarpur</footer>
 
@@ -758,6 +791,8 @@ $("f").addEventListener("submit", async e => {
     fd.append("sheet_rows", JSON.stringify(sheet.rows));
     fd.append("sheet_meta", JSON.stringify({ source: sheet.source + (sheetEdits() ? " (checked & edited)" : " (checked)"), strips: sheet.strips }));
     fd.append("invoices", JSON.stringify(invoices));
+    lastCheck = { sheet_rows: fd.get("sheet_rows"), sheet_meta: fd.get("sheet_meta"), invoices: fd.get("invoices") };
+    groups = []; picked.clear();
     data = await post("/api/reconcile", fd); filter = "ALL"; q = ""; $("q").value = "";
     render(); download(); showSource();
     $("result").scrollIntoView({ behavior: "smooth" });
@@ -767,37 +802,108 @@ $("f").addEventListener("submit", async e => {
   } finally { busy(1, false); }
 });
 
+// ---------------- manual matching: tick incorrect rows anywhere, group them; the server recomputes the report
+let groups = [], lastCheck = null;
+const picked = new Set();   // indexes into data.rows
+const PILL = { CORRECT: "OK", INCORRECT: "BAD", MATCHED: "MAN", "PARTLY MATCHED": "PART" };
+const ROWCLS = { CORRECT: "good-row", INCORRECT: "bad-row", MATCHED: "man-row", "PARTLY MATCHED": "part-row" };
+const ORDER = { INCORRECT: 0, "PARTLY MATCHED": 1, MATCHED: 2, CORRECT: 3 };
+
+function selbar() {
+  const rows = [...picked].map(i => data.rows[i]), net = rows.reduce((t, r) => t + r.diff, 0);
+  $("selbar").classList.toggle("on", rows.length > 0);
+  document.body.classList.toggle("selecting", rows.length > 0);
+  if (!rows.length) return;
+  $("sel-sum").textContent = `${rows.length} row${rows.length > 1 ? "s" : ""} selected`;
+  $("sel-parts").textContent = rows.map(r => `${r.sheet_model || r.invoice_model} ${r.diff > 0 ? "+" : ""}${r.diff}`).join(" · ");
+  $("sel-net").className = "net " + (net === 0 ? "zero" : "part");
+  $("sel-net").textContent = net === 0 ? "Net 0 → MATCHED" : `Net ${net > 0 ? "+" : ""}${net} → PARTLY MATCHED`;
+  $("sel-go").disabled = rows.length < 2;
+  $("sel-go-t").textContent = rows.length < 2 ? "Pick 2 or more" : net === 0 ? "Mark as matched" : "Group (partly matched)";
+}
+
+async function regroup(msg) {
+  $("sel-go").disabled = true; $("sel-go").querySelector(".spin").style.display = "inline-block";
+  try {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(lastCheck)) fd.append(k, v);
+    fd.append("groups", JSON.stringify(groups));
+    data = await post("/api/reconcile", fd);
+    picked.clear(); $("sel-note").value = "";
+    render(true); showSource();
+    const bytes = Uint8Array.from(atob(data.xlsx), c => c.charCodeAt(0));   // report link now includes the groups
+    $("dl").href = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    $("result2").classList.remove("show");   // a rate check made before is on the old Step 1 report
+    say(msg);
+  } catch (err) {
+    say(err.message, true);
+    throw err;
+  } finally { $("sel-go").querySelector(".spin").style.display = ""; selbar(); }
+}
+$("sel-go").addEventListener("click", async () => {
+  const idx = [...picked];
+  groups.push({ rows: idx, note: $("sel-note").value.trim() });
+  try { await regroup(`Group G${groups.length} saved — Excel report updated.`); } catch { groups.pop(); }
+});
+$("sel-clear").addEventListener("click", () => { picked.clear(); render(false); });
+function ungroup(g) {   // "G2" -> remove that group; later groups are renumbered by the server
+  const n = Number(g.slice(1)) - 1, removed = groups.splice(n, 1);
+  regroup(`${g} removed — rows back to incorrect.`).catch(() => groups.splice(n, 0, ...removed));
+}
+
 function render(animate = true) {
-  const d = data, count = s => d.rows.filter(r => r.result === s).length, bad = count("INCORRECT");
+  const d = data, count = s => d.rows.filter(r => r.result === s).length;
+  const open = count("INCORRECT") + count("PARTLY MATCHED");
   $("title").textContent = d.invoices.map(i => `${i.invoice_no} (${i.date})`).join(" + ") + ` · ${d.invoices[0].recipient || ""}`;
-  $("verdict").innerHTML = verdictHTML(bad, d.rows.length, "rows");
+  const man = count("MATCHED"), part = count("PARTLY MATCHED");
+  $("verdict").innerHTML = verdictHTML(open, d.rows.length, "rows") +
+    (man ? ` <span class="verdict" style="background:var(--check-bg);color:#1f5fa8">⇄ ${man} matched by hand</span>` : "") +
+    (part ? ` <span class="verdict" style="background:var(--warn-bg);color:var(--warn)">≈ ${part} partly matched</span>` : "");
   if (animate) {
     const diff = d.invoice_total - d.sheet_total;
     $("stats").innerHTML = statsHTML([
       [d.sheet_total, "Loading sheet pcs", "brand"],
       [d.invoice_total, `Invoice pcs · ${d.invoices.length} invoice${d.invoices.length > 1 ? "s" : ""}`, "brand"],
       [diff, "Difference (invoice − sheet)", diff === 0 ? "good" : "bad", 0, true],
-      [count("CORRECT"), "Correct rows", "good"], [bad, "Incorrect rows", bad ? "bad" : "good"],
+      [count("CORRECT"), "Correct rows", "good"],
+      ...(man || part ? [[man, "Matched by hand", "brand"], [part, "Partly matched", part ? "bad" : "good"]] : []),
+      [count("INCORRECT"), "Incorrect rows", count("INCORRECT") ? "bad" : "good"],
     ]);
     $("stats").querySelectorAll("b[data-v]").forEach(countUp);
   }
-  $("filters").innerHTML = filtersHTML(filter, d.rows);
+  const tabs = [["ALL", "All", d.rows.length], ["INCORRECT", "Incorrect", count("INCORRECT")],
+    ["PARTLY MATCHED", "Partly", part], ["MATCHED", "Matched", man], ["CORRECT", "Correct", count("CORRECT")]]
+    .filter(([k, , n]) => n || ["ALL", "INCORRECT", "CORRECT"].includes(k) || k === filter);
+  $("filters").innerHTML = tabs.map(([k, l, n]) => `<button type="button" class="${k === filter ? "on" : ""}" data-f="${k}">${l} · ${n}</button>`).join("");
   $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(false); });
   const needle = q.toLowerCase();
-  const rows = d.rows.filter(r => filter === "ALL" || r.result === filter)
-    .filter(r => !needle || [r.sheet_model, r.invoice_model, r.line, r.invoice_lines, r.status].join(" ").toLowerCase().includes(needle))
-    .sort((a, b) => (a.result === "CORRECT") - (b.result === "CORRECT"));
-  $("rows").innerHTML = rows.length ? rows.map((r, i) => `
-    <tr class="${r.check ? "check " : ""}${r.result === "CORRECT" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(i, 30) * 18}ms">
-      <td data-l="Result"><span class="pill ${r.result === "CORRECT" ? "OK" : "BAD"}">${r.result}</span></td>
+  const rows = d.rows.map((r, i) => ({ r, i })).filter(({ r }) => filter === "ALL" || r.result === filter)
+    .filter(({ r }) => !needle || [r.sheet_model, r.invoice_model, r.line, r.invoice_lines, r.status, r.group, r.note].join(" ").toLowerCase().includes(needle))
+    .sort((a, b) => ORDER[a.r.result] - ORDER[b.r.result] || String(a.r.group || "").localeCompare(String(b.r.group || ""), undefined, { numeric: true }));
+  $("rows").innerHTML = rows.length ? rows.map(({ r, i }, n) => `
+    <tr class="${r.check ? "check " : ""}${ROWCLS[r.result]}${picked.has(i) ? " sel" : ""}" style="animation-delay:${animate ? Math.min(n, 30) * 18 : 0}ms">
+      <td class="pick" data-l="Pick">${r.result === "INCORRECT" ? `<input type="checkbox" data-i="${i}" ${picked.has(i) ? "checked" : ""} aria-label="Pick row ${esc(r.sheet_model || r.invoice_model)} for a manual match">` : ""}</td>
+      <td data-l="Result"><span class="pill ${PILL[r.result]}">${r.result}</span>${r.group ? `<span class="grp">${esc(r.group)}<button type="button" data-g="${esc(r.group)}" title="Unmatch ${esc(r.group)}" aria-label="Unmatch ${esc(r.group)}">×</button></span>` : ""}${r.note ? `<span class="gnote">${esc(r.note)}</span>` : ""}</td>
       <td data-l="Line">${esc(r.line)}</td>
       <td class="m mono" data-l="Sheet model">${esc(r.sheet_model)}</td><td class="m mono" data-l="Invoice model">${esc(r.invoice_model)}</td>
       <td class="n" data-l="Sheet">${r.sheet_qty}</td><td class="n" data-l="Invoice">${r.invoice_qty}</td>
-      <td class="n" data-l="Diff">${signed(r.diff, v => v)}</td>
+      <td class="n" data-l="Diff">${signed(r.diff, v => v)}${r.group ? `<span class="gnet">group net ${r.group_net > 0 ? "+" : ""}${r.group_net}</span>` : ""}</td>
       <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}</td><td data-l="Invoice Sr.">${esc(r.invoice_lines)}</td>
-    </tr>`).join("") : `<tr><td class="empty" colspan="9">No rows match.</td></tr>`;
+    </tr>`).join("") : `<tr><td class="empty" colspan="10">No rows match.</td></tr>`;
   $("result").classList.add("show");
+  selbar();
 }
+$("rows").addEventListener("change", e => {
+  if (!e.target.matches("input[type=checkbox]")) return;
+  const i = Number(e.target.dataset.i);
+  e.target.checked ? picked.add(i) : picked.delete(i);
+  e.target.closest("tr").classList.toggle("sel", e.target.checked);
+  selbar();
+});
+$("rows").addEventListener("click", e => {
+  const g = e.target.closest("button[data-g]");
+  if (g && confirm(`Unmatch ${g.dataset.g}? Its rows go back to incorrect.`)) ungroup(g.dataset.g);
+});
 $("q").addEventListener("input", e => { q = e.target.value; render(false); });
 
 // ---------------- Step 2: rate check

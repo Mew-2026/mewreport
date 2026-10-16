@@ -18,6 +18,10 @@ and produces an Excel reconciliation report.
    column lines and header labels locate each cell, so the result does not depend on how the
    PDF stores its text. First copy only; pcs read are checked against the printed total
    (`invoice_parser.py`).
+   On the Step 1 result, incorrect rows can be **matched by hand**: tick any rows (they need not be
+   next to each other), add an optional note, and group them. A group whose differences add up to 0
+   becomes MATCHED; otherwise PARTLY MATCHED, showing the difference left. Groups can be undone; the
+   Excel report (and Step 2's combined report) lists them with their net difference and note.
 3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
    tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
 

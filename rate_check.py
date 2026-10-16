@@ -216,7 +216,8 @@ def write_excel(path, rows, s, master, wb=None):
 
 RECON_PDF_COLS = [  # Step 1 reconciliation columns repeated in the combined PDF: header, width (mm)
     ("Result", 18), ("Reason", 26), ("Sheet line", 14), ("Sheet model (as read)", 30), ("Invoice model", 28),
-    ("Match %", 13), ("Sheet qty", 14), ("Invoice qty", 15), ("Diff (inv - sheet)", 23), ("Invoice Sr. Nos", 60),
+    ("Match %", 13), ("Sheet qty", 14), ("Invoice qty", 15), ("Diff (inv - sheet)", 23), ("Group", 12),
+    ("Invoice Sr. Nos", 48),
 ]
 
 
@@ -249,7 +250,10 @@ def _recon_story(recon, ss, small, colors, mm, Paragraph, Spacer, Table, TableSt
             cells.append(Paragraph(str(v), small) if h == "Invoice Sr. Nos" and v else ("" if v is None else v))
         data.append(cells)
         if "Result" in idx:
-            style.append(("BACKGROUND", (0, n), (1, n), green if r[idx["Result"]] == "CORRECT" else red))
+            res = r[idx["Result"]]
+            fill = {"CORRECT": green, "MATCHED": colors.HexColor("#DDEBF7"),
+                    "PARTLY MATCHED": colors.HexColor("#FFF2CC")}.get(res, red)
+            style.append(("BACKGROUND", (0, n), (1, n), fill))
     data.append([totals.get(h, "TOTAL" if h == "Sheet model (as read)" else "") for h, _ in cols])
     style.append(("FONTNAME", (0, len(data) - 1), (-1, len(data) - 1), "Helvetica-Bold"))
     t = Table(data, repeatRows=1, colWidths=[w * mm for _, w in cols], hAlign="LEFT")

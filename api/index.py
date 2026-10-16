@@ -21,7 +21,7 @@ from loading_sheet_ocr import read_sheet  # noqa: E402
 from rate_check import ordered, run_on_step1, write_excel, write_pdf  # noqa: E402
 from rate_check import run as rate_run  # noqa: E402
 from rate_check import report_name as rate_report_name  # noqa: E402
-from reconcile import reconcile, report_name, write_report  # noqa: E402
+from reconcile import apply_groups, reconcile, report_name, write_report  # noqa: E402
 
 app = Flask(__name__, static_folder=os.path.join(ROOT, "public"), static_url_path="")  # local runs; Vercel serves public/ itself
 
@@ -110,6 +110,7 @@ def run():
         invoices = json.loads(request.form.get("invoices", "[]"))
         edited = json.loads(request.form["sheet_rows"]) if request.form.get("sheet_rows") else None
         meta = json.loads(request.form.get("sheet_meta", "{}"))
+        groups = json.loads(request.form.get("groups", "[]"))   # manual matches made on the page
     except ValueError:
         return jsonify(error="Bad invoice or loading sheet data"), 400
     if (edited is None and not sheet_file) or not invoices:
@@ -119,7 +120,7 @@ def run():
         sheet = _sheet_from_rows(edited, meta) if edited is not None else _read_upload(sheet_file)
         if not sheet["rows"]:
             return jsonify(error="Could not read any rows from the loading sheet"), 422
-        rows = reconcile(sheet, inv)
+        rows = apply_groups(reconcile(sheet, inv), groups)
         buf = io.BytesIO()
         write_report(buf, rows, sheet, inv)
     except ValueError as e:  # e.g. Excel without the Model / Qty headers

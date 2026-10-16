@@ -100,8 +100,37 @@ def reconcile(sheet, inv):
     return out
 
 
-RESULT_FILL = {"CORRECT": PatternFill("solid", fgColor="C6EFCE"), "INCORRECT": PatternFill("solid", fgColor="FFC7CE")}
-RESULT_FONT = {"CORRECT": Font(bold=True, color="006100"), "INCORRECT": Font(bold=True, color="9C0006")}
+def apply_groups(rows, groups):
+    """Manual matches made on the page. groups: [{"rows": [row indexes], "note": str}].
+
+    Rows grouped together are judged on their combined difference: net 0 -> MATCHED, otherwise
+    PARTLY MATCHED with the remaining difference. Only rows that were INCORRECT can be grouped."""
+    used = set()
+    for n, g in enumerate(groups or [], 1):
+        idx = sorted({int(i) for i in g.get("rows", [])})
+        if len(idx) < 2:
+            raise ValueError(f"Group {n}: choose at least 2 rows")
+        for i in idx:
+            if not 0 <= i < len(rows):
+                raise ValueError(f"Group {n}: unknown row")
+            if i in used:
+                raise ValueError(f"Group {n}: a row can only be in one group")
+            if rows[i]["result"] != "INCORRECT":
+                raise ValueError(f"Group {n}: only incorrect rows can be matched by hand")
+        used.update(idx)
+        net = sum(rows[i]["diff"] for i in idx)
+        note = " ".join(str(g.get("note") or "").split())[:200]
+        for i in idx:
+            rows[i].update(group=f"G{n}", group_net=net, note=note,
+                           result="MATCHED" if net == 0 else "PARTLY MATCHED")
+    return rows
+
+
+RESULT_ORDER = {"INCORRECT": 0, "PARTLY MATCHED": 1, "MATCHED": 2, "CORRECT": 3}
+RESULT_FILL = {"CORRECT": PatternFill("solid", fgColor="C6EFCE"), "INCORRECT": PatternFill("solid", fgColor="FFC7CE"),
+               "MATCHED": PatternFill("solid", fgColor="DDEBF7"), "PARTLY MATCHED": PatternFill("solid", fgColor="FFF2CC")}
+RESULT_FONT = {"CORRECT": Font(bold=True, color="006100"), "INCORRECT": Font(bold=True, color="9C0006"),
+               "MATCHED": Font(bold=True, color="1F4E79"), "PARTLY MATCHED": Font(bold=True, color="7F6000")}
 CHECK_FILL = PatternFill("solid", fgColor="BDD7EE")
 BOLD = Font(bold=True)
 
@@ -112,18 +141,19 @@ def write_report(path, rows, sheet, inv):
     ws.title = "Reconciliation"
     sheet_total = sum(r["qty"] for r in sheet["rows"])
     inv_total = sum(l["qty"] for l in inv["lines"])
-    correct = sum(r["result"] == "CORRECT" for r in rows)
-    all_ok = correct == len(rows)
+    count = {k: sum(r["result"] == k for r in rows) for k in RESULT_ORDER}
+    open_ = count["INCORRECT"] + count["PARTLY MATCHED"]
 
     ws.append(["LOADING SHEET vs INVOICE CHECK"])
     ws["A1"].font = Font(bold=True, size=14)
-    ws.append(["Overall", "ALL CORRECT" if all_ok else f"{len(rows) - correct} INCORRECT of {len(rows)}"])
+    ws.append(["Overall", "ALL CORRECT" if not open_ else f"{open_} INCORRECT of {len(rows)}"])
     ws.append(["Loading sheet pcs", sheet_total, "Invoice pcs", inv_total, "Difference", inv_total - sheet_total])
-    ws.append(["Correct rows", correct, "Incorrect rows", len(rows) - correct])
+    ws.append(["Correct rows", count["CORRECT"], "Incorrect rows", count["INCORRECT"],
+               "Matched by hand", count["MATCHED"], "Partly matched", count["PARTLY MATCHED"]])
     for row in ws.iter_rows(min_row=2, max_row=4):
         for c in row[::2]:
             c.font = BOLD
-    ws["B2"].font = RESULT_FONT["CORRECT" if all_ok else "INCORRECT"]
+    ws["B2"].font = RESULT_FONT["INCORRECT" if open_ else "CORRECT"]
     ws.append([])
     ws.append(["Invoice no", "Date", "Recipient", "Lines", "Pcs read", "Printed total", "Read check", "File"])
     for c in ws[ws.max_row]:
@@ -142,15 +172,15 @@ def write_report(path, rows, sheet, inv):
     cols = [("result", "Result"), ("status", "Reason"), ("line", "Sheet line"),
             ("sheet_model", "Sheet model (as read)"), ("invoice_model", "Invoice model"), ("score", "Match %"),
             ("sheet_qty", "Sheet qty"), ("invoice_qty", "Invoice qty"), ("diff", "Diff (inv - sheet)"),
-            ("invoices", "Invoice no"), ("invoice_lines", "Invoice Sr. Nos"), ("item_codes", "Item codes"),
+            ("group", "Group"), ("group_net", "Group net"), ("note", "Note"), ("invoices", "Invoice no"), ("invoice_lines", "Invoice Sr. Nos"), ("item_codes", "Item codes"),
             ("description", "Invoice description")]
     ws.append([h for _, h in cols])
     hdr = ws.max_row
     for c in ws[hdr]:
         c.font = BOLD
-    # incorrect rows first, then sheet order, then models missing from the sheet
-    for r in sorted(rows, key=lambda r: (r["result"] == "CORRECT", r["line"] == "", r["line"] or 0)):
-        ws.append([r[k] for k, _ in cols])
+    # incorrect rows first, then partly / fully matched by hand, then correct; sheet order inside each
+    for r in sorted(rows, key=lambda r: (RESULT_ORDER[r["result"]], r.get("group", ""), r["line"] == "", r["line"] or 0)):
+        ws.append([r.get(k, "") for k, _ in cols])
         cells = ws[ws.max_row]
         for c in cells[:9]:
             c.fill = RESULT_FILL[r["result"]]
@@ -168,9 +198,24 @@ def write_report(path, rows, sheet, inv):
     ws.append([])
     ws.append([f"Blue model cells: fuzzy match below {CHECK_SCORE}% - check the sheet model was read and paired correctly."])
     ws.append(["Compare 'Loading sheet pcs' with the total written on the paper: a misread row changes it."])
-    ws.auto_filter.ref = f"A{hdr}:M{last}"
+    groups = {}
+    for r in rows:
+        if r.get("group"):
+            groups.setdefault(r["group"], []).append(r)
+    if groups:
+        ws.append([])
+        ws.append(["Manual matches (made on the page)"])
+        ws.cell(ws.max_row, 1).font = BOLD
+        ws.append(["Group", "Result", "Net diff", "Rows (sheet model / invoice model : diff)", "", "", "", "", "", "Note"])
+        for c in ws[ws.max_row]:
+            c.font = BOLD
+        for g, rs in sorted(groups.items(), key=lambda kv: int(kv[0][1:])):
+            parts = ", ".join(f"{r['sheet_model'] or '-'} / {r['invoice_model'] or '-'} : {r['diff']:+d}" for r in rs)
+            ws.append([g, rs[0]["result"], rs[0]["group_net"], parts, "", "", "", "", "", rs[0].get("note", "")])
+            ws.cell(ws.max_row, 2).font = RESULT_FONT[rs[0]["result"]]
+    ws.auto_filter.ref = f"A{hdr}:P{last}"
     ws.freeze_panes = ws.cell(row=hdr + 1, column=1)
-    for col, w in zip("ABCDEFGHIJKLM", [12, 16, 10, 22, 16, 9, 10, 11, 15, 15, 22, 34, 60]):
+    for col, w in zip("ABCDEFGHIJKLMNOP", [16, 16, 10, 22, 16, 9, 10, 11, 15, 8, 10, 30, 15, 22, 34, 60]):
         ws.column_dimensions[col].width = w
 
     il = wb.create_sheet("Invoice lines")
