@@ -125,7 +125,7 @@ COLS = [  # key, header, width, number format
 ]
 
 
-def write_excel(path, rows, s, master, wb=None):
+def write_excel(path, rows, s, master, wb=None, weight=None):
     """wb: the Step 1 report workbook; the rate check is added to it as tab 2 (combined report)."""
     if wb is None:
         wb = Workbook()
@@ -209,6 +209,9 @@ def write_excel(path, rows, s, master, wb=None):
         for p in master["problems"]:
             mp.append([p])
         mp.column_dimensions["A"].width = 110
+    if weight:
+        from weight_recon import add_weight_sheets
+        add_weight_sheets(wb, weight, master)
     wb.save(path)
 
 
@@ -261,7 +264,7 @@ def _recon_story(recon, ss, small, colors, mm, Paragraph, Spacer, Table, TableSt
     return story + [t]
 
 
-def write_pdf(path, rows, s, recon=None):
+def write_pdf(path, rows, s, recon=None, weight=None):
     """recon: Step 1 reconciliation (step1_report.read_step1); it goes first, the rate check on a new page."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -272,14 +275,18 @@ def write_pdf(path, rows, s, recon=None):
     ss = getSampleStyleSheet()
     small = ParagraphStyle("small", parent=ss["Normal"], fontSize=6.5, leading=8)
     green, red, blue = colors.HexColor("#C6EFCE"), colors.HexColor("#FFC7CE"), colors.HexColor("#BDD7EE")
-    title = "Loading Sheet & Invoice Rate Check" if recon else "Invoice Rate vs Mastersheet Check"
+    title = ("Load Check: Weight, Unit Price & Quantity" if weight else
+             "Loading Sheet & Invoice Rate Check" if recon else "Invoice Rate vs Mastersheet Check")
     doc = SimpleDocTemplate(path, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm,
                             topMargin=10 * mm, bottomMargin=10 * mm, title=title, author="mewreport")
     money = lambda v: "" if v is None else f"{v:,.2f}"
     story = [Paragraph(title, ss["Title"])]
+    if weight:   # the answer first: loaded vs billed kg and what explains the difference
+        from weight_recon import pdf_story
+        story += pdf_story(weight, ss, small, colors, mm, Paragraph, Spacer, Table, TableStyle) + [PageBreak()]
     if recon:
         story += _recon_story(recon, ss, small, colors, mm, Paragraph, Spacer, Table, TableStyle)
-        story += [PageBreak(), Paragraph("Step 2 · Invoice rate vs mastersheet", ss["Heading2"])]
+        story += [PageBreak(), Paragraph("Check 1 detail · Invoice rate vs mastersheet, line by line", ss["Heading2"])]
 
     overall = "ALL CORRECT" if s["incorrect"] == 0 else f"{s['incorrect']} INCORRECT of {s['lines']} lines"
     info = [

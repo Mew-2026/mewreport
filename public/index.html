@@ -224,6 +224,22 @@
   .stat.good b { color: var(--ok); } .stat.bad b { color: var(--bad); }
   .stat.good { background: color-mix(in srgb, var(--ok) 4%, var(--card)); } .stat.bad { background: color-mix(in srgb, var(--bad) 4%, var(--card)); }
 
+  /* weight reconciliation */
+  .weq { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 14px 16px; margin-bottom: 16px; font-size: 14px;
+         background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .weq .t { font-weight: 800; }
+  .weq .op { color: var(--muted); font-weight: 700; }
+  .weq .part { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 9px; background: var(--card2); border: 1px solid var(--line); }
+  .weq .part small { color: var(--muted); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .weq .part b { font-variant-numeric: tabular-nums; }
+  .weq .part.big { background: color-mix(in srgb, var(--accent) 12%, var(--card)); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+  .gate { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; margin-bottom: 12px; font-size: 13.5px; font-weight: 600; border: 1px solid; }
+  .gate.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-line); }
+  .gate.bad { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+  h3.chk { display: flex; align-items: center; gap: 10px; margin: 26px 0 10px; font-size: 16px; font-weight: 750; }
+  h3.chk .num { width: 28px; height: 28px; font-size: 13px; border-radius: 8px; }
+  .nim { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn); font-size: 13px; }
+  .nim b { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
   .warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; }
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
   .filters { display: inline-flex; flex-wrap: wrap; gap: 4px; height: 40px; padding: 4px; border-radius: 11px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
@@ -464,8 +480,8 @@
     </form>
 
     <form id="f2" class="card" novalidate>
-      <div class="card-h"><div class="num">2</div><h2>Rate check</h2></div>
-      <p class="sub">Each invoice rate vs mastersheet weight × today's rate per kg, as Excel and PDF.</p>
+      <div class="card-h"><div class="num">2</div><h2>Weight &amp; rate check</h2></div>
+      <p class="sub">Loaded kg (sheet nos × master kg/pc) vs billed kg (invoice rate ÷ Rate/kg). Check 1 unit price, then Check 2 quantity.</p>
       <div class="pair">
         <div class="col">
           <div class="lbl-row"><label class="lbl" for="master">Mastersheet</label></div>
@@ -552,10 +568,16 @@
 
   <section id="result2" class="result">
     <div class="result-h">
-      <div><h2>Step 2 result · Rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
+      <div><h2>Step 2 result · Weight &amp; rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
       <div class="dl"><a class="btn sm" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
     </div>
     <div id="warn2"></div>
+    <div id="wbox" hidden>
+      <div class="stats" id="wstats"></div>
+      <div class="weq" id="weq"></div>
+    </div>
+    <h3 class="chk"><span class="num">1</span>Check 1 · Unit price — invoice rate vs master kg × Rate/kg</h3>
+    <div id="gate"></div>
     <div class="stats" id="stats2"></div>
     <div class="bar"><div class="filters" id="filters2"></div><input class="search" id="q2" type="search" placeholder="Search code, description, invoice…"></div>
     <div class="table"><table>
@@ -567,6 +589,15 @@
       <tbody id="rows2"></tbody>
     </table></div>
     <p class="note"><i></i>Blue "Matched by" cells: item code not in the mastersheet, matched by description — check by eye.</p>
+    <div id="check2" hidden>
+      <h3 class="chk"><span class="num">2</span>Check 2 · Quantity — loading sheet vs invoice, in kg</h3>
+      <div class="table"><table>
+        <colgroup><col style="width:16%"><col style="width:13%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12%"><col style="width:18%"></colgroup>
+        <thead><tr><th>Model</th><th>Status</th><th class="n">Sheet qty</th><th class="n">Invoice qty</th><th class="n">Diff</th><th class="n">Master kg/pc</th><th class="n">Effect (kg)</th><th>Group / note</th></tr></thead>
+        <tbody id="wrows"></tbody>
+      </table></div>
+      <div id="nim"></div>
+    </div>
   </section>
 </main>
 
@@ -1120,9 +1151,11 @@ $("f2").addEventListener("submit", async e => {
   busy(2, true);
   try {
     const fd = new FormData();
-    if (step1) fd.append("step1", step1);
-    else fd.append("invoices", JSON.stringify(await readInvoices(say2)));
-    say2("Checking rates…");
+    if (data && lastCheck) {   // full check from the Step 1 result on the page: weight reconciliation too
+      for (const [k, v] of Object.entries(lastCheck)) fd.append(k, v);
+      fd.append("groups", JSON.stringify(groups));
+    } else fd.append("invoices", JSON.stringify(await readInvoices(say2)));
+    say2("Checking weights and rates…");
     try { localStorage.setItem("ratecheck", JSON.stringify({ tol: $("tol").value })); } catch (e) {}
     fd.append("master", $("master").files[0]);
     fd.append("rate", $("rate").value);
@@ -1140,10 +1173,51 @@ $("f2").addEventListener("submit", async e => {
   } finally { busy(2, false); }
 });
 
+const kgf = v => v == null ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function renderWeight() {
+  const w = rc.weight;
+  $("wbox").hidden = $("check2").hidden = !w;
+  if (!w) { $("gate").innerHTML = ""; return; }
+  const s = w.summary, v = s.variance_kg;
+  $("wstats").innerHTML = statsHTML([
+    [s.loaded_kg, `Loaded kg · ${s.loaded_pcs_weighed} of ${s.loaded_pcs} pcs weighed`, "brand", 2], [s.billed_kg, `Billed kg · ${s.billed_pcs} pcs on invoice`, "brand", 2],
+    [v, "Variance (billed − loaded)", Math.abs(v) < 0.005 ? "good" : "bad", 2, true],
+    [s.price_kg, "Check 1 · unit price (kg)", s.price_issues ? "bad" : "good", 2, true],   // a few hundredths of a kg are rounding
+    [s.qty_kg, "Check 2 · quantity (kg)", Math.abs(s.qty_kg) < 0.005 ? "good" : "bad", 2, true],
+    ...(s.not_in_master_kg ? [[s.not_in_master_kg, "Billed, not in master (kg)", "bad", 2, true]] : []),
+  ]);
+  $("wstats").querySelectorAll("b[data-v]").forEach(countUp);
+  const sg = x => (x > 0 ? "+" : "") + kgf(x);
+  $("weq").innerHTML = `<span class="t">Variance</span><span class="part big"><b>${sg(v)} kg</b></span><span class="op">=</span>
+    <span class="part"><small>Check 1 price</small><b>${sg(s.price_kg)} kg</b></span><span class="op">+</span>
+    <span class="part"><small>Check 2 qty</small><b>${sg(s.qty_kg)} kg</b></span>` +
+    (s.not_in_master_kg ? `<span class="op">+</span><span class="part"><small>not in master</small><b>${sg(s.not_in_master_kg)} kg</b></span>` : "");
+  $("gate").innerHTML = s.price_issues
+    ? `<div class="gate bad">⚠ ${s.price_issues} model${s.price_issues > 1 ? "s have" : " has"} a unit price that does not match the master (${sg(s.price_kg)} kg). Resolve these first — Check 2 assumes the master weights.</div>`
+    : `<div class="gate ok">✔ Unit prices match the master for every model — Check 2 below explains the variance.</div>`;
+  const ms = [...w.models].filter(m => m.master_kg != null).sort((a, b) => Math.abs(b.qty_kg) - Math.abs(a.qty_kg));
+  $("wrows").innerHTML = ms.map((m, n) => `
+    <tr class="${m.qty_status === "OK" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(n, 30) * 15}ms">
+      <td class="mono" data-l="Model">${esc(m.model)}</td>
+      <td data-l="Status"><span class="pill ${m.qty_status === "OK" ? "OK" : "BAD"}">${esc(m.qty_status)}</span></td>
+      <td class="n" data-l="Sheet qty">${m.sheet_qty}</td><td class="n" data-l="Invoice qty">${m.invoice_qty}</td>
+      <td class="n" data-l="Diff">${signed(m.qty_diff, x => x)}</td><td class="n" data-l="Master kg/pc">${kgf(m.master_kg)}</td>
+      <td class="n" data-l="Effect (kg)">${signed(m.qty_kg, kgf)}</td>
+      <td data-l="Group / note">${esc([m.group, m.note].filter(Boolean).join(" · "))}</td>
+    </tr>`).join("");
+  const nim = s.sheet_not_in_master;
+  $("nim").innerHTML = nim.length ? `<div class="nim">Loading sheet models <b>not in the master sheet</b> — no weight, so left out of the loaded kg (listed in the Excel "Master sheet (loaded)" tab):
+    ${nim.map(m => `<b>${esc(m.model)}</b> × ${m.sheet_qty}`).join(" · ")}</div>` : "";
+}
+
 function render2(animate = true) {
+  if (animate) renderWeight();
   const s = rc.summary;
   $("title2").textContent = `${rc.step1_file} · Rate ${money(s.rate_per_kg)} / Kg · tolerance ${s.tolerance_pct}% · ${s.master_file}`;
-  $("verdict2").innerHTML = verdictHTML(s.incorrect, s.lines, "lines");
+  const wv = rc.weight && rc.weight.summary.variance_kg;
+  $("verdict2").innerHTML = (rc.weight ? (Math.abs(wv) < 0.005 ? `<span class="verdict good">✔ Billed weight equals loaded weight</span>`
+      : `<span class="verdict bad">${wv > 0 ? "▲" : "▼"} ${wv > 0 ? "+" : ""}${kgf(wv)} kg billed ${wv > 0 ? "more" : "less"} than loaded</span>`) : "") +
+    verdictHTML(s.incorrect, s.lines, "invoice lines");
   if (animate) {
     const warn = [];
     for (const i of s.invoices)

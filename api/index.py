@@ -22,6 +22,7 @@ from rate_check import ordered, run_on_step1, write_excel, write_pdf  # noqa: E4
 from rate_check import run as rate_run  # noqa: E402
 from rate_check import report_name as rate_report_name  # noqa: E402
 from reconcile import apply_groups, reconcile, report_name, write_report  # noqa: E402
+from weight_recon import weight_recon  # noqa: E402
 
 app = Flask(__name__, static_folder=os.path.join(ROOT, "public"), static_url_path="")  # local runs; Vercel serves public/ itself
 
@@ -143,42 +144,66 @@ def run():
 
 @app.post("/api/ratecheck")
 def rate_check():
-    """Step 2: invoice rates vs mastersheet kg x today's Rate/Kg.
+    """Step 2: weight & rate check.
 
-    With the Step 1 report (the Step 1 result on the page) the output is one combined report: the Step 1
-    Excel plus a Rate check tab, and a PDF of both. Without it, the parsed invoices (from /api/invoice)
-    are checked on their own - no loading sheet needed."""
-    step1, master = request.files.get("step1"), request.files.get("master")
+    With the Step 1 result on the page (its sheet rows, invoices and manual groups) the report is the
+    full one: weight reconciliation (loaded vs billed kg, split into Check 1 unit price and Check 2
+    quantity), the master sheet with loaded qty in column D, the Step 1 table and the line-by-line rate
+    check. Without Step 1, the parsed invoices get the rate check on their own."""
+    master = request.files.get("master")
     if not master or not master.filename:
         return jsonify(error="Upload the mastersheet Excel"), 400
     try:
         invoices = json.loads(request.form.get("invoices", "[]"))
+        sheet_rows = json.loads(request.form["sheet_rows"]) if request.form.get("sheet_rows") else None
+        meta = json.loads(request.form.get("sheet_meta", "{}"))
+        groups = json.loads(request.form.get("groups", "[]"))
     except ValueError:
-        return jsonify(error="Bad invoice data"), 400
-    has_step1 = bool(step1 and step1.filename)
-    if not has_step1 and not invoices:
-        return jsonify(error="Choose the invoice PDFs in Step 1 (or run Step 1 first)"), 400
+        return jsonify(error="Bad invoice or loading sheet data"), 400
+    if not invoices:
+        return jsonify(error="Choose the invoice PDFs in Step 1"), 400
     try:
         rate = float(request.form.get("rate", ""))
         tol = float(request.form.get("tolerance", "0.5") or 0.5)
     except ValueError:
         return jsonify(error="Enter today's Rate/Kg and the tolerance as numbers"), 400
     try:
-        if has_step1:
-            rows, s, m, inv, wb, recon = run_on_step1(step1.read(), master.read(), master.filename, rate, tol)
-            name, source = rate_report_name(inv, "report"), step1.filename
+        master_bytes = master.read()
+        weight = None
+        if sheet_rows is not None:   # full check: rebuild Step 1 from the page's data (no credits)
+            inv = combine_invoices(invoices, [i.get("file") for i in invoices])
+            sheet = _sheet_from_rows(sheet_rows, meta)
+            recon_rows = apply_groups(reconcile(sheet, inv), groups)
+            step1 = io.BytesIO()
+            write_report(step1, recon_rows, sheet, inv)
+            rows, s, m, inv, wb, recon = run_on_step1(step1.getvalue(), master_bytes, master.filename, rate, tol)
+            weight = weight_recon(recon_rows, combine_invoices(invoices, [i.get("file") for i in invoices]), m, rate, tol)
+            name, source = rate_report_name(inv, "report"), "Step 1 result on the page"
         else:
-            rows, s, m, inv = rate_run(master.read(), master.filename, invoices, [i.get("file") for i in invoices],
-                                  rate, tol)
+            rows, s, m, inv = rate_run(master_bytes, master.filename, invoices, [i.get("file") for i in invoices],
+                                       rate, tol)
             wb = recon = None
             name, source = rate_report_name(inv), "invoice PDFs (rate check only)"
         xlsx, pdf = io.BytesIO(), io.BytesIO()
-        write_excel(xlsx, rows, s, m, wb)
-        write_pdf(pdf, rows, s, recon)
+        write_excel(xlsx, rows, s, m, wb, weight)
+        write_pdf(pdf, rows, s, recon, weight)
     except ValueError as e:
         return jsonify(error=str(e)), 422
     except Exception as e:
         return jsonify(error=f"{type(e).__name__}: {e}"), 500
     return jsonify(summary=s, rows=ordered(rows), master_problems=m["problems"], step1_file=source,
-                   combined=has_step1, filename=name,
+                   combined=weight is not None, filename=name,
+                   weight=_json_weight(weight) if weight else None,
                    xlsx=base64.b64encode(xlsx.getvalue()).decode(), pdf=base64.b64encode(pdf.getvalue()).decode())
+
+
+def _json_weight(w):
+    r2 = lambda v: None if v is None else round(v, 2)
+    keys = ("model", "sheet_model", "sheet_lines", "sheet_qty", "invoice_qty", "qty_diff", "group", "master_kg",
+            "invoice_kg", "billed_kg", "loaded_kg", "price_kg", "qty_kg", "master_price", "invoice_price",
+            "price_pct", "price_status", "qty_status", "note")
+    models = [{k: (r2(m.get(k)) if isinstance(m.get(k), float) else m.get(k)) for k in keys} for m in w["models"]]
+    s = {k: v for k, v in w["summary"].items() if k != "sheet_not_in_master"}
+    s["sheet_not_in_master"] = [{k: m[k] for k in ("model", "sheet_model", "sheet_lines", "sheet_qty")}
+                                for m in w["summary"]["sheet_not_in_master"]]
+    return {"summary": s, "models": models}

@@ -30,13 +30,20 @@ and produces an Excel reconciliation report.
    never paired with non-Pro. Rows with the same model on the sheet are added up. Anything else stays
    NOT IN INVOICE / NOT IN SHEET with a "possible match" hint, to be matched by hand (`reconcile.py`).
 
-4. **Rate check** (step 2): upload the mastersheet (*Item code*, *Material description*, *weight (kg)*;
-   `.xlsx`/`.xlsm`/`.csv`, columns found by their contents even if shifted under the headers) and type
-   today's Rate/Kg. Expected rate = Rate/Kg x mastersheet kg; CORRECT when the invoice Rate(Rs) is within
-   the tolerance % (default 0.5). Lines are found by item code (O/0 and I/1 treated alike), else by
-   description with the same battery model and numbers (flagged blue). When Step 1 has been run on the
-   page, the output is one combined report (the Step 1 Excel with a *Rate check* tab, and a PDF of both);
-   otherwise the invoice PDFs chosen in Step 1 are checked on their own - Step 1 need not be run
+4. **Weight & rate check** (step 2): upload the mastersheet (*Item code*, *Material description*,
+   *weight (kg)* per piece; `.xlsx`/`.xlsm`/`.csv`) and type today's Rate/Kg. With the Step 1 result on
+   the page it answers "why does the invoice bill more kg than were loaded?" (`weight_recon.py`):
+   - **Loaded weight** = sheet qty x master kg/pc per model; **billed weight** = invoice qty x
+     (invoice rate / Rate/Kg). **Variance** = billed - loaded, split exactly into:
+   - **Check 1, unit price** (first): each invoice line's rate vs its item code's master kg x Rate/Kg,
+     as kg (invoice qty x (invoice kg/pc - master kg/pc)); flagged when outside the tolerance %.
+   - **Check 2, quantity**: (invoice qty - sheet qty) x master kg/pc per model, largest first.
+   - plus billed kg of invoice models with no master weight.
+   One model can have several item codes with different weights: each invoice line uses its own; the
+   sheet qty uses the qty-weighted average of the billed codes. The Excel adds *Weight reconciliation*
+   and *Master sheet (loaded)* tabs (column D = loaded qty; sheet models not in the master listed
+   below), next to the Step 1 table and the line-by-line rate check; the PDF opens with the weight
+   answer. Without Step 1, the invoices get the line-by-line rate check only
    (`rate_check.py`, `mastersheet.py`, `step1_report.py`).
 
 ## Run on your computer (Windows)
