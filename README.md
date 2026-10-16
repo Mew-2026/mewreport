@@ -11,6 +11,9 @@ and produces an Excel reconciliation report.
    - **Excel / CSV** typed as `Sr No | Model | Qty`: read directly, no credits (`loading_sheet_excel.py`).
      The page offers the format as a download (`public/loading_sheet_template.xlsx`, pre-filled with
      the 13/10/26 sheet as an example; regenerate with `python loading_sheet_excel.py --template ...`).
+   Either way, the rows read are shown on the page in an editable grid (next to the photo, when it is
+   one) before anything is matched: fix misread models or quantities, add or delete rows, then
+   *Check against invoices*. *Save as Excel* keeps the corrected sheet for reuse without credits.
 2. **Invoices** (system-generated PDFs) are read from their text layer by position: the table's
    column lines and header labels locate each cell, so the result does not depend on how the
    PDF stores its text. First copy only; pcs read are checked against the printed total

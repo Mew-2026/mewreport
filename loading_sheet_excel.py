@@ -99,8 +99,12 @@ EXAMPLE = [  # the 13/10/26 loading sheet, Patiala -> Muzaffarpur
 ]
 
 
-def write_template(path):
-    """The Excel format offered for download: headers plus the 13/10/26 sheet as a worked example."""
+def write_template(path, rows=None):
+    """The Excel format: headers plus rows. Without rows it is the downloadable format, filled with the
+    13/10/26 sheet as a worked example; with rows (model, qty) it saves a checked / edited loading sheet.
+    path may be a file path or a file object."""
+    example = rows is None
+    rows = EXAMPLE if example else rows
     wb = Workbook()
     ws = wb.active
     ws.title = "Loading sheet"
@@ -112,7 +116,7 @@ def write_template(path):
         c.fill = PatternFill("solid", fgColor="0F3D63")
         c.alignment = Alignment(horizontal="center", vertical="center")
         c.border = border
-    for i, (m, q) in enumerate(EXAMPLE, 1):
+    for i, (m, q) in enumerate(rows, 1):
         ws.append([i, m, q])
         for c in ws[ws.max_row]:
             c.border = border
@@ -123,6 +127,9 @@ def write_template(path):
     ws.row_dimensions[1].height = 22
     ws.freeze_panes = "A2"
 
+    if not example:
+        wb.save(path)
+        return
     info = wb.create_sheet("How to fill")
     notes = [
         "Loading sheet - Excel format (Mahesh Engineering Works)",

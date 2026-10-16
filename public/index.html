@@ -201,6 +201,39 @@
   .note i { width: 12px; height: 12px; border-radius: 3px; background: var(--check-bg); border: 1px solid var(--line); flex: none; }
   .empty { padding: 28px; text-align: center; color: var(--muted); }
 
+  /* ---------- loading sheet editor */
+  .ed-wrap { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 18px; align-items: start; }
+  .ed-wrap.no-photo { grid-template-columns: 1fr; }
+  .ed-photo { margin: 0; position: sticky; top: calc(var(--hdr, 69px) + 12px); background: var(--card); border: 1px solid var(--line);
+              border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; animation: pop .4s ease both; }
+  .ed-photo img { display: block; width: 100%; max-height: calc(100vh - 170px); object-fit: contain; border-radius: 10px; cursor: zoom-in; }
+  .ed-photo figcaption { text-align: center; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .ed-main { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; min-width: 0; }
+  .ed-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 12px; }
+  .ed-total { font-weight: 800; font-size: 15px; }
+  .ed-total small { color: var(--muted); font-weight: 600; font-size: 13px; margin-left: 6px; }
+  .ed-hint { color: var(--muted); font-size: 13px; }
+  .ed-tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--warn-bg); color: var(--warn); margin-left: 6px; }
+  .ed-grid { columns: 250px; column-gap: 14px; }   /* fills down each column, like the paper */
+  .ed-row { break-inside: avoid; display: grid; grid-template-columns: 30px 1fr 74px 30px; gap: 6px; align-items: center;
+            padding: 4px 6px; margin-bottom: 4px; border-radius: 10px; border: 1px solid transparent; transition: background .2s, border-color .2s; animation: fadeRow .3s ease both; }
+  .ed-row:hover { background: var(--row-hover); }
+  .ed-row.edited { background: color-mix(in srgb, var(--amber) 10%, transparent); border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
+  .ed-row.bad { border-color: var(--bad); background: var(--bad-bg); }
+  .ed-row.new-row { animation: pop .3s ease both; }
+  .ed-n { font-size: 12px; font-weight: 700; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .ed-row input { width: 100%; height: 34px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text);
+                  font: 600 13px ui-monospace, "Cascadia Mono", Consolas, monospace; transition: border-color .15s, box-shadow .15s; }
+  .ed-row input.ed-qty { text-align: right; font-family: Inter, system-ui, sans-serif; }
+  .ed-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+  .ed-del { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; transition: background .15s, color .15s; }
+  .ed-del:hover { background: var(--bad-bg); color: var(--bad); }
+  .ed-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #editor .msg { margin-top: 12px; }
+  .lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(8, 15, 26, .82); display: grid; place-items: center; padding: 20px; cursor: zoom-out; animation: pop .2s ease both; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: var(--shadow-lg); }
+  @media (max-width: 860px) { .ed-wrap { grid-template-columns: 1fr; } .ed-photo { position: static; } .ed-photo img { max-height: 320px; } }
+
   /* narrow screens: each row becomes a card, so nothing scrolls sideways */
   @media (max-width: 860px) {
     thead { display: none; }
@@ -245,7 +278,7 @@
   <div class="steps">
     <form id="f" class="card" novalidate>
       <div class="card-h"><div class="num">1</div><h2>Loading sheet vs invoices</h2></div>
-      <p class="sub">Add the loading sheet (photo or Excel) and every invoice PDF for this truck.</p>
+      <p class="sub">Add the loading sheet (photo or Excel) and every invoice PDF for this truck. The sheet is shown for checking before the match.</p>
       <div class="pair">
         <div class="col">
           <div class="lbl-row">
@@ -284,7 +317,7 @@
       </div>
       <div class="progress" id="prog"><i></i></div>
       <div class="actions">
-        <button class="btn" id="go" type="submit"><span class="spin"></span>Check loading sheet</button>
+        <button class="btn" id="go" type="submit"><span class="spin"></span><span id="go-t">Read loading sheet</span></button>
         <div id="msg" class="msg"></div>
       </div>
     </form>
@@ -323,6 +356,26 @@
       </div>
     </form>
   </div>
+
+  <section id="editor" class="result">
+    <div class="result-h">
+      <div><h2>Check &amp; edit loading sheet</h2><div class="meta" id="ed-meta"></div></div>
+      <div class="dl">
+        <button type="button" class="btn sm ghost" id="ed-reset">↺ Reset</button>
+        <button type="button" class="btn sm ghost" id="ed-save">⬇ Save as Excel</button>
+        <button type="button" class="btn sm" id="ed-check"><span class="spin"></span>Check against invoices</button>
+      </div>
+    </div>
+    <div class="ed-wrap" id="ed-wrap">
+      <figure class="ed-photo" id="ed-photo" hidden><img id="ed-img" alt="Loading sheet photo"><figcaption>Click the photo to enlarge</figcaption></figure>
+      <div class="ed-main">
+        <div class="ed-bar"><span class="ed-total" id="ed-total"></span><span class="ed-hint">Correct anything misread — the check uses these rows. Enter moves to the next row.</span></div>
+        <div class="ed-grid" id="ed-grid"></div>
+        <div class="ed-actions"><button type="button" class="btn sm ghost" id="ed-add">＋ Add row</button></div>
+      </div>
+    </div>
+    <div class="msg" id="ed-msg"></div>
+  </section>
 
   <section id="result" class="result">
     <div class="result-h">
@@ -370,7 +423,9 @@ let data = null, filter = "ALL", q = "";
 let sheetMode = "photo";   // loading sheet as a photo (renamed.to) or a typed Excel (read directly)
 let invoices = [], invoicesKey = "";   // invoice PDFs read once, shared by step 1 and step 2
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const say = (t, err) => { $("msg").className = err ? "msg err" : "msg"; $("msg").textContent = t; };
+const say = (t, err) => {   // Step 1 messages show in the card and, once it is open, in the editor
+  for (const id of ["msg", "ed-msg"]) { $(id).className = err ? "msg err" : "msg"; $(id).textContent = t; }
+};
 const kb = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
 
 // ---------------- drop zones: show chosen files, highlight on drag
@@ -414,6 +469,7 @@ try { if (localStorage.getItem("sheetmode") === "excel") setMode("excel"); } cat
 
 function busy(n, on) {
   $(n === 1 ? "go" : "go2").disabled = on;
+  if (n === 1) $("ed-check").disabled = on;
   $(n === 1 ? "prog" : "prog2").classList.toggle("on", on);
 }
 
@@ -489,18 +545,150 @@ function download() {
   $("dl").click();
 }
 
+// ---------------- Step 1: read the loading sheet, let the user check / edit it, then match the invoices
+let sheet = null;          // {rows: [{model, qty, sheet_row, orig_model, orig_qty}], source, strips, file}
+
+function resetSheet() {
+  sheet = null;
+  $("editor").classList.remove("show");
+  $("go-t").textContent = "Read loading sheet";
+}
+$("sheet").addEventListener("change", resetSheet);
+$("sheetx").addEventListener("change", () => { resetSheet(); if ($("sheetx").files.length) $("f").requestSubmit(); });  // Excel: free, read at once
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", resetSheet));
+
+async function readSheet() {
+  const excel = sheetMode === "excel", f = $(excel ? "sheetx" : "sheet").files[0];
+  if (!f) throw new Error(excel ? "Choose the loading sheet Excel" : "Choose the loading sheet photo");
+  say(excel ? "Reading the loading sheet Excel…" : "Reading the loading sheet with renamed.to — about half a minute…");
+  const fd = new FormData();
+  fd.append("sheet", excel ? f : await shrink(f));
+  const got = await post("/api/sheet", fd);
+  sheet = {
+    rows: got.rows.map(r => ({ model: r.model, qty: r.qty, sheet_row: r.sheet_row, orig_model: r.model, orig_qty: r.qty })),
+    source: got.source || (excel ? "excel" : "photo"), strips: got.strips || [], file: f,
+  };
+  showEditor(true);
+}
+
+function sheetEdits() {
+  return sheet.rows.filter(r => r.orig_model === undefined || r.model !== r.orig_model || Number(r.qty) !== r.orig_qty).length
+    + Math.max(0, sheet.read - sheet.rows.filter(r => r.orig_model !== undefined).length);
+}
+
+function edTotals() {
+  const valid = sheet.rows.filter(r => r.model && Number(r.qty) > 0);
+  const total = valid.reduce((t, r) => t + Number(r.qty), 0), edits = sheetEdits();
+  $("ed-total").innerHTML = `Total ${total.toLocaleString("en-IN")} pcs<small>${valid.length} rows</small>` +
+    (edits ? `<span class="ed-tag">${edits} change${edits > 1 ? "s" : ""}</span>` : "");
+}
+
+function rowHTML(r, i) {
+  const edited = r.orig_model === undefined || r.model !== r.orig_model || Number(r.qty) !== r.orig_qty;
+  const bad = (r.model || r.qty) && (!r.model || !(Number(r.qty) > 0));
+  return `<div class="ed-row${edited ? " edited" : ""}${bad ? " bad" : ""}" data-i="${i}" style="animation-delay:${Math.min(i, 40) * 12}ms">
+    <span class="ed-n">${i + 1}</span>
+    <input class="ed-model" value="${esc(r.model)}" spellcheck="false" autocomplete="off" aria-label="Model, row ${i + 1}" placeholder="Model">
+    <input class="ed-qty" type="number" min="1" step="1" inputmode="numeric" value="${esc(r.qty)}" aria-label="Qty, row ${i + 1}" placeholder="Qty">
+    <button type="button" class="ed-del" title="Delete row" aria-label="Delete row ${i + 1}">×</button>
+  </div>`;
+}
+
+function drawRows() {
+  $("ed-grid").innerHTML = sheet.rows.map(rowHTML).join("");
+  edTotals();
+}
+
+function showEditor(first) {
+  if (first) { sheet.read = sheet.rows.length; sheet.original = sheet.rows.map(r => ({ ...r })); }
+  const photo = sheet.source === "photo";
+  $("ed-photo").hidden = !photo;
+  $("ed-wrap").classList.toggle("no-photo", !photo);
+  if (photo) $("ed-img").src = URL.createObjectURL(sheet.file);
+  $("ed-meta").textContent = `Read from ${photo ? "photo" : "Excel"} · ${sheet.file.name} · ${sheet.read} rows`;
+  drawRows();
+  $("go-t").textContent = "Check against invoices";
+  $("editor").classList.add("show");
+  $("editor").scrollIntoView({ behavior: "smooth" });
+  say(photo ? "Check the rows against the photo, fix anything misread, then Check against invoices."
+            : "Check the rows, then Check against invoices.");
+}
+
+// edits: update the row in place (keeps the cursor where it is), refresh the total and highlights
+$("ed-grid").addEventListener("input", e => {
+  const row = e.target.closest(".ed-row"); if (!row) return;
+  const r = sheet.rows[Number(row.dataset.i)];
+  if (e.target.classList.contains("ed-model")) r.model = e.target.value.replace(/\s+/g, "").toUpperCase();
+  else r.qty = e.target.value === "" ? "" : Number(e.target.value);
+  const edited = r.orig_model === undefined || r.model !== r.orig_model || Number(r.qty) !== r.orig_qty;
+  row.classList.toggle("edited", edited);
+  row.classList.toggle("bad", Boolean((r.model || r.qty) && (!r.model || !(Number(r.qty) > 0))));
+  edTotals();
+});
+$("ed-grid").addEventListener("change", e => {   // show the model as it will be used (no spaces, capitals)
+  if (e.target.classList.contains("ed-model")) e.target.value = sheet.rows[Number(e.target.closest(".ed-row").dataset.i)].model;
+});
+$("ed-grid").addEventListener("click", e => {
+  if (!e.target.classList.contains("ed-del")) return;
+  const row = e.target.closest(".ed-row");
+  sheet.rows.splice(Number(row.dataset.i), 1);
+  drawRows();
+});
+$("ed-grid").addEventListener("keydown", e => {   // Enter: model -> qty -> next row's model
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const inputs = [...$("ed-grid").querySelectorAll("input")], k = inputs.indexOf(e.target);
+  if (k === inputs.length - 1) addRow(); else inputs[k + 1].focus();
+});
+function addRow() {
+  sheet.rows.push({ model: "", qty: "", sheet_row: null });
+  drawRows();
+  const last = $("ed-grid").lastElementChild;
+  last.classList.add("new-row");
+  last.querySelector(".ed-model").focus();
+}
+$("ed-add").addEventListener("click", addRow);
+$("ed-reset").addEventListener("click", () => {   // back to the rows as read (no new read, no credits)
+  sheet.rows = sheet.original.map(r => ({ ...r }));
+  drawRows();
+});
+$("ed-img").addEventListener("click", () => {
+  const box = document.createElement("div");
+  box.className = "lightbox";
+  box.innerHTML = `<img src="${$("ed-img").src}" alt="Loading sheet photo">`;
+  box.addEventListener("click", () => box.remove());
+  const onKey = e => { if (e.key === "Escape") { box.remove(); document.removeEventListener("keydown", onKey); } };
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(box);
+});
+$("ed-save").addEventListener("click", async () => {
+  try {
+    const fd = new FormData();
+    fd.append("rows", JSON.stringify(sheet.rows));
+    const r = await fetch("/api/sheet-excel", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Server error (${r.status})`);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await r.blob());
+    a.download = sheet.file.name.replace(/\.\w+$/, "") + "_checked.xlsx";
+    a.click();
+  } catch (err) { say(err.message, true); }
+});
+$("ed-check").addEventListener("click", () => $("f").requestSubmit());
+
 $("f").addEventListener("submit", async e => {
   e.preventDefault();
-  const excel = sheetMode === "excel", sheetFile = $(excel ? "sheetx" : "sheet").files[0];
-  if (!sheetFile) return say(excel ? "Choose the loading sheet Excel" : "Choose the loading sheet photo", true);
-  if (!$("invoice").files.length) return say("Choose the invoice PDFs", true);
+  if (!$("invoice").files.length && sheet) return say("Choose the invoice PDFs", true);
   busy(1, true);
   try {
+    if (!sheet) { await readSheet(); return; }   // first click: read and show the sheet for checking
+    const bad = sheet.rows.findIndex(r => (r.model || r.qty) && (!r.model || !(Number(r.qty) > 0)));
+    if (bad >= 0) throw new Error(`Row ${bad + 1} needs a model and a quantity above 0`);
     await readInvoices(say);
     $("result2").classList.remove("show");   // an earlier rate check was on another Step 1 outcome
-    say(excel ? "Reading the loading sheet Excel…" : "Reading the loading sheet with renamed.to — about half a minute…");
+    say("Matching the loading sheet with the invoices…");
     const fd = new FormData();
-    fd.append("sheet", excel ? sheetFile : await shrink(sheetFile));
+    fd.append("sheet_rows", JSON.stringify(sheet.rows));
+    fd.append("sheet_meta", JSON.stringify({ source: sheet.source + (sheetEdits() ? " (checked & edited)" : " (checked)"), strips: sheet.strips }));
     fd.append("invoices", JSON.stringify(invoices));
     data = await post("/api/reconcile", fd); filter = "ALL"; q = ""; $("q").value = "";
     render(); download(); showSource();

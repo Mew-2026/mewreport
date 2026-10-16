@@ -1,8 +1,8 @@
-"""Vercel entry point: loading sheet photo + one or more invoice PDFs in, reconciliation Excel out.
+"""Vercel entry point: loading sheet (photo or Excel) + one or more invoice PDFs in, reconciliation Excel out.
 
 Vercel caps a request body at ~4.5 MB, so the page uploads each invoice PDF to /api/invoice on its
-own (parsed to JSON, no credits used) and then sends the sheet photo plus those JSON results to
-/api/reconcile.
+own (parsed to JSON, no credits used). The loading sheet is read by /api/sheet and shown on the page
+for checking and editing; /api/reconcile then gets the edited rows plus the parsed invoices.
 """
 import base64
 import io
@@ -16,7 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from invoice_parser import combine_invoices, read_invoice  # noqa: E402
-from loading_sheet_excel import read_sheet_excel  # noqa: E402
+from loading_sheet_excel import read_sheet_excel, write_template  # noqa: E402
 from loading_sheet_ocr import read_sheet  # noqa: E402
 from rate_check import ordered, run_on_step1, write_excel, write_pdf  # noqa: E402
 from rate_check import run as rate_run  # noqa: E402
@@ -45,22 +45,78 @@ def parse_invoice():
     return jsonify(dict(inv, file=f.filename))
 
 
+def _read_upload(f):
+    """Loading sheet from an uploaded file: Excel / CSV read directly (no credits), a photo via renamed.to."""
+    if os.path.splitext(f.filename or "")[1].lower() in (".xlsx", ".xlsm", ".csv"):
+        return read_sheet_excel(f.read(), f.filename)
+    return dict(read_sheet(f.read(), log=lambda m: None), source="photo")
+
+
+def _sheet_from_rows(raw, base=None):
+    """Loading sheet from the rows checked / edited on the page."""
+    rows = []
+    for r in raw:
+        model = "".join(str(r.get("model") or "").split()).upper()
+        try:
+            qty = int(float(r.get("qty")))
+        except (TypeError, ValueError):
+            qty = 0
+        if not model and not qty:
+            continue  # empty row left on the page
+        if not model or qty <= 0:
+            raise ValueError(f"Loading sheet row {len(rows) + 1}: needs a model and a quantity above 0")
+        rows.append({"line": len(rows) + 1, "sheet_row": r.get("sheet_row") or len(rows) + 1,
+                     "model": model, "qty": qty})
+    base = base or {}
+    return {"rows": rows, "total": sum(r["qty"] for r in rows), "strips": base.get("strips", []),
+            "source": base.get("source", "edited")}
+
+
+@app.post("/api/sheet")
+def read_loading_sheet():
+    """Read the loading sheet only, so the page can show it for checking and editing."""
+    f = request.files.get("sheet")
+    if not f or not f.filename:
+        return jsonify(error="Choose the loading sheet (photo or Excel)"), 400
+    try:
+        sheet = _read_upload(f)
+    except ValueError as e:
+        return jsonify(error=str(e)), 422
+    except Exception as e:  # renamed.to errors
+        return jsonify(error=f"{type(e).__name__}: {e}"), 500
+    if not sheet["rows"]:
+        return jsonify(error="Could not read any rows from the loading sheet - add them by hand"), 422
+    return jsonify(sheet)
+
+
+@app.post("/api/sheet-excel")
+def sheet_excel():
+    """The checked / edited loading sheet as Excel, to keep and reuse without reading the photo again."""
+    try:
+        sheet = _sheet_from_rows(json.loads(request.form.get("rows", "[]")))
+    except ValueError as e:
+        return jsonify(error=str(e)), 422
+    buf = io.BytesIO()
+    write_template(buf, [(r["model"], r["qty"]) for r in sheet["rows"]])
+    return buf.getvalue(), 200, {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": 'attachment; filename="loading_sheet.xlsx"'}
+
+
 @app.post("/api/reconcile")
 def run():
     sheet_file = request.files.get("sheet")
     try:
         invoices = json.loads(request.form.get("invoices", "[]"))
+        edited = json.loads(request.form["sheet_rows"]) if request.form.get("sheet_rows") else None
+        meta = json.loads(request.form.get("sheet_meta", "{}"))
     except ValueError:
-        return jsonify(error="Bad invoice data"), 400
-    if not sheet_file or not invoices:
-        return jsonify(error="Upload the loading sheet (photo or Excel) and at least one invoice PDF"), 400
-    is_excel = os.path.splitext(sheet_file.filename or "")[1].lower() in (".xlsx", ".xlsm", ".csv")
+        return jsonify(error="Bad invoice or loading sheet data"), 400
+    if (edited is None and not sheet_file) or not invoices:
+        return jsonify(error="Add the loading sheet (photo or Excel) and at least one invoice PDF"), 400
     try:
         inv = combine_invoices(invoices, [i.get("file") for i in invoices])
-        if is_excel:  # typed loading sheet: read directly, no renamed.to credits
-            sheet = read_sheet_excel(sheet_file.read(), sheet_file.filename)
-        else:
-            sheet = read_sheet(sheet_file.read(), log=lambda m: None)
+        sheet = _sheet_from_rows(edited, meta) if edited is not None else _read_upload(sheet_file)
         if not sheet["rows"]:
             return jsonify(error="Could not read any rows from the loading sheet"), 422
         rows = reconcile(sheet, inv)
