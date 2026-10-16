@@ -45,6 +45,16 @@ def model_key(desc):
     return s
 
 
+def model_sort_key(model):
+    """Similar models sit together in every table: 2042STJ, 2042TT, 2048STJ ... PC18054P, PC18054TJP, RC18054TJP ...
+    Sorted by the model number, then the letters after it (ST, STJ, TT, P), then the family letters before it."""
+    m = str(model or "").upper()
+    d = re.search(r"\d{3,}", m)
+    if not d:
+        return (1, 0, "", m, m)
+    return (0, int(d.group()), m[d.end():], m[:d.start()], m)
+
+
 def _num(s):
     s = s.replace(",", "").strip()
     try:

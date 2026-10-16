@@ -1,7 +1,7 @@
 """Weight reconciliation: why does the invoice bill more (or fewer) kg than were loaded?
 
   Loaded weight = sum over models of  loading-sheet qty x master kg/pc
-  Billed weight = sum over invoice lines of  qty x (invoice rate / Rate per kg)
+  Billed weight = sum over invoice lines of  qty x invoice kg/pc,  invoice kg/pc = rate / Rate per kg to 2 decimals
   Variance      = billed - loaded, split exactly into
     Check 1  unit price / weight :  invoice qty x (invoice kg/pc - master kg/pc)   per model
     Check 2  quantity            :  (invoice qty - sheet qty) x master kg/pc        per model
@@ -12,6 +12,7 @@ nothing is read again.
 """
 from collections import Counter, defaultdict
 
+from invoice_parser import model_sort_key
 from mastersheet import code_key
 
 
@@ -20,7 +21,7 @@ def _model_kgs(master, model):
     return [k for k, _ in Counter(m["kg"] for m in master["rows"] if m["model"] == model).most_common()]
 
 
-def weight_recon(recon_rows, inv, master, rate_per_kg, tol_pct):
+def weight_recon(recon_rows, inv, master, rate_per_kg):
     """One model can sit under several item codes with different weights (and rates), so Check 1 works
     line by line with each line's own item-code weight; the model's kg/pc for loaded weight and Check 2 is
     the average of the billed lines' weights (weighted by qty), or the master's weight when not billed."""
@@ -45,7 +46,7 @@ def weight_recon(recon_rows, inv, master, rate_per_kg, tol_pct):
             kg = fallback[0] if fallback else None
         kgs = sorted({round(k, 4) for _, k in known_lines} | set(fallback if not known_lines else []))
         priced = [(l, k) for l, k in line_kg if l.get("rate")]
-        billed = sum(l["qty"] * l["rate"] / rate_per_kg for l, _ in priced)
+        billed = sum(l["qty"] * round(l["rate"] / rate_per_kg, 2) for l, _ in priced)   # kg/pc to 2 dp, like the master
         pq = sum(l["qty"] for l, _ in priced)
         m = {"model": key, "sheet_model": r["sheet_model"], "sheet_lines": r.get("sheet_lines", ""),
              "sheet_qty": sq, "invoice_qty": iq, "qty_diff": iq - sq, "group": r.get("group", ""),
@@ -61,14 +62,14 @@ def weight_recon(recon_rows, inv, master, rate_per_kg, tol_pct):
             m["loaded_kg"] = sq * kg
             m["qty_kg"] = (iq - sq) * kg
             m["price_kg"] = billed - iq * kg   # = sum over lines of qty x (invoice kg - its code's kg); keeps the split exact
-            # unit price status: each line against its own item code's weight; the worst line decides
-            pcts = [(l["rate"] - k * rate_per_kg) / (k * rate_per_kg) * 100 for l, k in priced if k]
-            if not pcts:
+            # unit price: each line's billed kg/pc (2 dp) against its own item code's master kg/pc; worst line decides
+            gaps = [round(l["rate"] / rate_per_kg, 2) - round(k, 2) for l, k in priced if k]
+            if not gaps:
                 m["price_status"] = "NOT BILLED"
             else:
-                worst = max(pcts, key=abs)
-                m["price_pct"] = round(worst, 2)
-                m["price_status"] = "OK" if abs(worst) <= tol_pct + 1e-9 else ("PRICE HIGH" if worst > 0 else "PRICE LOW")
+                worst = max(gaps, key=abs)
+                m["kgpc_gap"] = round(worst, 2)
+                m["price_status"] = "OK" if abs(worst) < 0.005 else ("PRICE HIGH" if worst > 0 else "PRICE LOW")
             m["qty_status"] = "OK" if iq == sq else ("MORE BILLED" if iq > sq else "LESS BILLED")
             if len(kgs) > 1:
                 m["note"] = (f"item codes weigh {', '.join(f'{x:g}' for x in kgs)} kg - each invoice line uses its own; "
@@ -81,10 +82,12 @@ def weight_recon(recon_rows, inv, master, rate_per_kg, tol_pct):
     price = sum(m["price_kg"] for m in known)
     qty = sum(m["qty_kg"] for m in known)
     unknown_billed = sum(m["billed_kg"] for m in not_in_master)
+    # whole kg everywhere; the quantity part takes up any 1 kg rounding so the parts always add up on paper
+    loaded_r, billed_r, price_r, nim_r = round(loaded), round(billed), round(price), round(unknown_billed)
     summary = {
-        "rate_per_kg": rate_per_kg, "tolerance_pct": tol_pct,
-        "loaded_kg": round(loaded, 2), "billed_kg": round(billed, 2), "variance_kg": round(billed - loaded, 2),
-        "price_kg": round(price, 2), "qty_kg": round(qty, 2), "not_in_master_kg": round(unknown_billed, 2),
+        "rate_per_kg": rate_per_kg,
+        "loaded_kg": loaded_r, "billed_kg": billed_r, "variance_kg": billed_r - loaded_r,
+        "price_kg": price_r, "qty_kg": billed_r - loaded_r - price_r - nim_r, "not_in_master_kg": nim_r,
         "loaded_pcs": sum(m["sheet_qty"] for m in models), "billed_pcs": sum(m["invoice_qty"] for m in models),
         "loaded_pcs_weighed": sum(m["sheet_qty"] for m in known),   # sheet pcs with a master weight
         "price_issues": sum(m["price_status"] in ("PRICE HIGH", "PRICE LOW") for m in models),
@@ -104,14 +107,14 @@ def add_weight_sheets(wb, w, master):
 
     bold, title = Font(bold=True), Font(bold=True, size=14)
     red, green, amber = (PatternFill("solid", fgColor=c) for c in ("FFC7CE", "C6EFCE", "FFF2CC"))
-    kgf = "#,##0.00"
+    kgf = "#,##0"   # whole kg; kg/pc keeps 2 decimals
     s = w["summary"]
 
     ws = wb.create_sheet("Weight reconciliation", 0 if "Reconciliation" not in wb.sheetnames else 1)
     ws.append(["WEIGHT RECONCILIATION - loaded vs billed"])
     ws["A1"].font = title
     rows = [
-        ("Today's Rate/Kg", s["rate_per_kg"]), ("Tolerance %", s["tolerance_pct"]),
+        ("Today's Rate/Kg", s["rate_per_kg"]), ("Unit price match", "invoice kg/pc = master kg/pc (2 decimals)"),
         ("Loaded weight (sheet qty x master kg)", s["loaded_kg"]), ("Billed weight (invoice rate / Rate/Kg x qty)", s["billed_kg"]),
         ("VARIANCE (billed - loaded)", s["variance_kg"]),
         ("  of which Check 1 - unit price / weight", s["price_kg"]), ("  of which Check 2 - quantity", s["qty_kg"]),
@@ -120,7 +123,8 @@ def add_weight_sheets(wb, w, master):
     for label, v in rows:
         ws.append([label, v])
         ws.cell(ws.max_row, 1).font = bold
-        ws.cell(ws.max_row, 2).number_format = kgf
+        if isinstance(v, (int, float)) and label != "Today's Rate/Kg":
+            ws.cell(ws.max_row, 2).number_format = kgf
     ws.cell(6, 2).font = Font(bold=True, color="9C0006" if abs(s["variance_kg"]) >= 0.01 else "006100")
     ws.append(["Loaded pcs", s["loaded_pcs"], "Billed pcs", s["billed_pcs"]])
     ws.append([])
@@ -139,15 +143,14 @@ def add_weight_sheets(wb, w, master):
                 fill = green if st == "OK" else amber if st in ("NOT IN MASTER", "NOT BILLED") else red
                 ws.cell(ws.max_row, status_col + 1).fill = fill
 
-    models = sorted(w["models"], key=lambda m: -abs(m["price_kg"] or 0))
+    models = sorted(w["models"], key=lambda m: model_sort_key(m["model"]))
     ws.append(["CHECK 1 - Unit price (run first): invoice rate vs master kg x Rate/Kg"])
     ws.cell(ws.max_row, 1).font = Font(bold=True, size=12)
-    table(["Model", "Status", "Master kg/pc", "Invoice kg/pc", "Master price", "Invoice price", "Diff %", "Invoice qty", "Effect (kg)", "Note"],
+    table(["Model", "Status", "Master kg/pc", "Invoice kg/pc", "Master price", "Invoice price", "kg/pc gap", "Invoice qty", "Effect (kg)", "Note"],
           [[m["model"], m["price_status"], m["master_kg"], m["invoice_kg"], m["master_price"], m["invoice_price"],
-            m.get("price_pct"), m["invoice_qty"], m["price_kg"], m.get("note", "")] for m in models if m["invoice_qty"]],
-          [None, None, "0.00", "0.00", kgf, kgf, "0.00", "0", kgf, None], status_col=1)
+            m.get("kgpc_gap"), m["invoice_qty"], m["price_kg"], m.get("note", "")] for m in models if m["invoice_qty"]],
+          [None, None, "0.00", "0.00", kgf, kgf, "+0.00;-0.00;0.00", "0", kgf, None], status_col=1)
     ws.append([])
-    models = sorted(w["models"], key=lambda m: -abs(m["qty_kg"] or 0))
     ws.append(["CHECK 2 - Quantity: loading sheet vs invoice, converted to kg with master kg/pc"])
     ws.cell(ws.max_row, 1).font = Font(bold=True, size=12)
     table(["Model", "Status", "Sheet model", "Sheet line", "Sheet qty", "Invoice qty", "Diff (inv - sheet)", "Master kg/pc", "Effect (kg)", "Group"],
@@ -184,7 +187,7 @@ def add_weight_sheets(wb, w, master):
     ms.append(["Model", "Written on sheet", "Sheet line", "Qty (nos)"])
     for c in ms[ms.max_row]:
         c.font = bold
-    for m in w["summary"]["sheet_not_in_master"]:
+    for m in sorted(w["summary"]["sheet_not_in_master"], key=lambda m: model_sort_key(m["model"])):
         ms.append([m["model"], m["sheet_model"], m["sheet_lines"], m["sheet_qty"]])
         ms.cell(ms.max_row, 4).fill = amber
     for col, wd in zip("ABCDEF", [18, 46, 12, 16, 12, 14]):
@@ -195,7 +198,8 @@ def add_weight_sheets(wb, w, master):
 def pdf_story(w, ss, small, colors, mm, Paragraph, Spacer, Table, TableStyle):
     """Weight reconciliation section for the combined PDF."""
     s = w["summary"]
-    kg = lambda v: "" if v is None else f"{v:,.2f}"
+    kg = lambda v: "" if v is None else f"{v:,.0f}"
+    kgpc = lambda v: "" if v is None else f"{v:,.2f}"
     story = [Paragraph("Weight reconciliation · loaded vs billed", ss["Heading2"])]
     info = [["Loaded weight", kg(s["loaded_kg"]) + " kg", "Billed weight", kg(s["billed_kg"]) + " kg", "Variance", kg(s["variance_kg"]) + " kg"],
             ["Check 1 · unit price", kg(s["price_kg"]) + " kg", "Check 2 · quantity", kg(s["qty_kg"]) + " kg",
@@ -205,14 +209,14 @@ def pdf_story(w, ss, small, colors, mm, Paragraph, Spacer, Table, TableStyle):
                            *[("FONTNAME", (c, 0), (c, -1), "Helvetica-Bold") for c in (0, 2, 4)],
                            ("BACKGROUND", (5, 0), (5, 0), colors.HexColor("#FFC7CE" if abs(s["variance_kg"]) >= 0.01 else "#C6EFCE"))]))
     story += [t, Spacer(0, 4 * mm)]
-    rows = [m for m in sorted(w["models"], key=lambda m: -abs((m["price_kg"] or 0) + (m["qty_kg"] or 0) + (m["billed_kg"] if m["master_kg"] is None else 0)))
-            if abs(m["price_kg"] or 0) >= 0.01 or abs(m["qty_kg"] or 0) >= 0.01 or m["master_kg"] is None]
+    rows = [m for m in sorted(w["models"], key=lambda m: model_sort_key(m["model"]))
+            if abs(m["price_kg"] or 0) >= 0.5 or abs(m["qty_kg"] or 0) >= 0.5 or m["master_kg"] is None]
     data = [["Model", "Sheet qty", "Invoice qty", "Master kg/pc", "Invoice kg/pc", "Check 1 kg", "Check 2 kg", "Status"]]
     for m in rows:
-        data.append([m["model"], m["sheet_qty"], m["invoice_qty"], kg(m["master_kg"]), kg(m["invoice_kg"]),
+        data.append([m["model"], m["sheet_qty"], m["invoice_qty"], kgpc(m["master_kg"]), kgpc(m["invoice_kg"]),
                      kg(m["price_kg"]), kg(m["qty_kg"]), f"{m['price_status']} / {m['qty_status']}"])
     t = Table(data, repeatRows=1, hAlign="LEFT", colWidths=[w_ * mm for w_ in (34, 18, 20, 22, 22, 22, 22, 60)])
     t.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 7), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
                            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("ALIGN", (1, 1), (6, -1), "RIGHT"),
                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E7E9EE"))]))
-    return story + [Paragraph("Models that contribute to the variance (largest first):", small), t]
+    return story + [Paragraph("Models that contribute to the variance (similar models together):", small), t]

@@ -30,20 +30,23 @@ and produces an Excel reconciliation report.
    never paired with non-Pro. Rows with the same model on the sheet are added up. Anything else stays
    NOT IN INVOICE / NOT IN SHEET with a "possible match" hint, to be matched by hand (`reconcile.py`).
 
-4. **Weight & rate check** (step 2): upload the mastersheet (*Item code*, *Material description*,
-   *weight (kg)* per piece; `.xlsx`/`.xlsm`/`.csv`) and type today's Rate/Kg. With the Step 1 result on
-   the page it answers "why does the invoice bill more kg than were loaded?" (`weight_recon.py`):
-   - **Loaded weight** = sheet qty x master kg/pc per model; **billed weight** = invoice qty x
-     (invoice rate / Rate/Kg). **Variance** = billed - loaded, split exactly into:
-   - **Check 1, unit price** (first): each invoice line's rate vs its item code's master kg x Rate/Kg,
-     as kg (invoice qty x (invoice kg/pc - master kg/pc)); flagged when outside the tolerance %.
-   - **Check 2, quantity**: (invoice qty - sheet qty) x master kg/pc per model, largest first.
+4. **Weight & rate check**: the page has **one input card** for the whole load - loading sheet (photo or
+   Excel), invoice PDFs, mastersheet (*Item code*, *Material description*, *weight (kg)* per piece) and
+   today's Rate/Kg. *Read loading sheet* shows the sheet for checking; *Run check* fills two result tabs,
+   **Loading sheet vs invoices** and **Weight & rate check** (`weight_recon.py`):
+   - **Loaded kg** = sheet nos x master kg/pc; **billed kg** = invoice nos x invoice kg/pc, where
+     invoice kg/pc = rate / Rate/Kg rounded to 2 decimals. **Variance** = billed - loaded, split into
+   - **Check 1, unit price** (first): an invoice line matches when its kg/pc (2 decimals) equals its item
+     code's master kg/pc - no tolerance; differences shown in kg,
+   - **Check 2, quantity**: (invoice nos - sheet nos) x master kg/pc per model,
    - plus billed kg of invoice models with no master weight.
-   One model can have several item codes with different weights: each invoice line uses its own; the
-   sheet qty uses the qty-weighted average of the billed codes. The Excel adds *Weight reconciliation*
-   and *Master sheet (loaded)* tabs (column D = loaded qty; sheet models not in the master listed
-   below), next to the Step 1 table and the line-by-line rate check; the PDF opens with the weight
-   answer. Without Step 1, the invoices get the line-by-line rate check only
+   kg and rupee figures are whole numbers (kg/pc and Rs/kg keep 2 decimals); the quantity part absorbs
+   any 1 kg rounding so the parts always add up. One model can have several item codes with different
+   weights: each invoice line uses its own. Manual matches re-run the weight check automatically.
+   Every results table lists similar models together (by model number, then letters), so look-alikes
+   such as PC18054TJP / RC18054TJP or BC18048ST / RC18048ST sit side by side.
+   The Excel adds *Weight reconciliation* and *Master sheet (loaded)* tabs (column D = loaded qty;
+   sheet models not in the master listed below); the PDF opens with the weight answer
    (`rate_check.py`, `mastersheet.py`, `step1_report.py`).
 
 ## Run on your computer (Windows)
@@ -76,7 +79,7 @@ python reconcile.py --sheet loading_sheet.jpg --invoice 5260118338.PDF 526011833
 Rate check on a Step 1 report, giving the combined `.xlsx` and `.pdf`:
 
 ```bash
-python rate_check.py --step1 reports/report.xlsx --master mastersheet.xlsx --rate 119.54 --tolerance 0.5 --out reports/combined
+python rate_check.py --step1 reports/report.xlsx --master mastersheet.xlsx --rate 119.54 --out reports/combined
 ```
 
 (`--invoice a.pdf b.pdf` in place of `--step1` gives the rate check alone.)

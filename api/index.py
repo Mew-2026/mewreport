@@ -164,9 +164,8 @@ def rate_check():
         return jsonify(error="Choose the invoice PDFs in Step 1"), 400
     try:
         rate = float(request.form.get("rate", ""))
-        tol = float(request.form.get("tolerance", "0.5") or 0.5)
     except ValueError:
-        return jsonify(error="Enter today's Rate/Kg and the tolerance as numbers"), 400
+        return jsonify(error="Enter today's Rate/Kg as a number"), 400
     try:
         master_bytes = master.read()
         weight = None
@@ -176,12 +175,12 @@ def rate_check():
             recon_rows = apply_groups(reconcile(sheet, inv), groups)
             step1 = io.BytesIO()
             write_report(step1, recon_rows, sheet, inv)
-            rows, s, m, inv, wb, recon = run_on_step1(step1.getvalue(), master_bytes, master.filename, rate, tol)
-            weight = weight_recon(recon_rows, combine_invoices(invoices, [i.get("file") for i in invoices]), m, rate, tol)
+            rows, s, m, inv, wb, recon = run_on_step1(step1.getvalue(), master_bytes, master.filename, rate)
+            weight = weight_recon(recon_rows, combine_invoices(invoices, [i.get("file") for i in invoices]), m, rate)
             name, source = rate_report_name(inv, "report"), "Step 1 result on the page"
         else:
             rows, s, m, inv = rate_run(master_bytes, master.filename, invoices, [i.get("file") for i in invoices],
-                                       rate, tol)
+                                       rate)
             wb = recon = None
             name, source = rate_report_name(inv), "invoice PDFs (rate check only)"
         xlsx, pdf = io.BytesIO(), io.BytesIO()
@@ -201,7 +200,7 @@ def _json_weight(w):
     r2 = lambda v: None if v is None else round(v, 2)
     keys = ("model", "sheet_model", "sheet_lines", "sheet_qty", "invoice_qty", "qty_diff", "group", "master_kg",
             "invoice_kg", "billed_kg", "loaded_kg", "price_kg", "qty_kg", "master_price", "invoice_price",
-            "price_pct", "price_status", "qty_status", "note")
+            "kgpc_gap", "price_status", "qty_status", "note")
     models = [{k: (r2(m.get(k)) if isinstance(m.get(k), float) else m.get(k)) for k in keys} for m in w["models"]]
     s = {k: v for k, v in w["summary"].items() if k != "sheet_not_in_master"}
     s["sheet_not_in_master"] = [{k: m[k] for k in ("model", "sheet_model", "sheet_lines", "sheet_qty")}

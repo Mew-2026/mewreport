@@ -1,12 +1,12 @@
 """Check invoice rates against the mastersheet weight x today's rate per kg; write Excel and PDF.
 
-Expected rate per piece = Rate/Kg x mastersheet weight (kg). Each invoice line's Rate(Rs) must be
-within the tolerance (%) of it.
+Expected rate per piece = Rate/Kg x mastersheet weight (kg). An invoice line is CORRECT when its rate
+divided by Rate/Kg, rounded to 2 decimals (the kg/pc it bills), equals the master kg/pc.
 
 Usage:
   python rate_check.py --master mastersheet.xlsx --rate 119.54 --step1 reconciliation_x.xlsx   # combined report
   python rate_check.py --master mastersheet.xlsx --rate 119.54 --invoice inv1.pdf [inv2.pdf ...]
-                       [--tolerance 0.5] [--out reports/rate_check]
+                       [--out reports/rate_check]
 """
 import argparse
 import os
@@ -17,7 +17,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from rapidfuzz import fuzz
 
-from invoice_parser import combine_invoices, model_key, read_invoice
+from invoice_parser import combine_invoices, model_key, model_sort_key, read_invoice
 from mastersheet import code_key, read_master
 
 DESC_SCORE = 90   # description fallback: minimum fuzzy score when the model number is not recognised
@@ -46,7 +46,7 @@ def find_by_desc(master, desc):
     return (best[1], round(best[0])) if best[1] is not None and best[0] >= floor else (None, 0)
 
 
-def check(master, inv, rate_per_kg, tol_pct):
+def check(master, inv, rate_per_kg):
     rows = []
     for l in inv["lines"]:
         m = master["by_code"].get(code_key(l["code"]))
@@ -57,10 +57,11 @@ def check(master, inv, rate_per_kg, tol_pct):
         rate, qty = l["rate"], l["qty"]
         r = {
             "invoice_no": l["invoice_no"], "sr": l["sr"], "code": l["code"], "desc": l["desc"], "qty": qty,
+            "model": l.get("model") or model_key(l["desc"]),
             "invoice_rate": rate, "invoice_value": l["value"], "matched_by": how, "check": check_by_eye,
             "master_code": m["code"] if m else "", "master_desc": m["desc"] if m else "",
             "kg": m["kg"] if m else None, "expected_rate": None, "diff": None, "diff_pct": None,
-            "billed_per_kg": None, "expected_value": None, "value_diff": None, "total_kg": None,
+            "billed_per_kg": None, "expected_value": None, "value_diff": None, "total_kg": None, "invoice_kg": None,
         }
         if not m:
             r["status"] = "NOT IN MASTER"
@@ -74,17 +75,20 @@ def check(master, inv, rate_per_kg, tol_pct):
                      billed_per_kg=round(rate / m["kg"], 2), total_kg=round(m["kg"] * qty, 2),
                      expected_value=round(exp * qty, 2),
                      value_diff=round((l["value"] or rate * qty) - exp * qty, 2))
-            r["status"] = "OK" if abs(pct) <= tol_pct + 1e-9 else ("RATE HIGH" if diff > 0 else "RATE LOW")
+            # the kg/pc the invoice bills, to the 2 decimals the master uses, must equal the master's
+            inv_kg = round(rate / rate_per_kg, 2)
+            r["invoice_kg"] = inv_kg
+            r["status"] = "OK" if abs(inv_kg - round(m["kg"], 2)) < 0.005 else ("RATE HIGH" if inv_kg > m["kg"] else "RATE LOW")
         r["result"] = "CORRECT" if r["status"] == "OK" else "INCORRECT"
         rows.append(r)
     return rows
 
 
-def summary(rows, inv, rate_per_kg, tol_pct, master_name):
+def summary(rows, inv, rate_per_kg, master_name):
     correct = sum(r["result"] == "CORRECT" for r in rows)
     priced = [r for r in rows if r["expected_rate"] is not None]
     return {
-        "rate_per_kg": rate_per_kg, "tolerance_pct": tol_pct, "master_file": master_name or "",
+        "rate_per_kg": rate_per_kg, "master_file": master_name or "",
         "generated": datetime.now().strftime("%d-%m-%Y %H:%M"),
         "lines": len(rows), "correct": correct, "incorrect": len(rows) - correct,
         "not_in_master": sum(r["status"] == "NOT IN MASTER" for r in rows),
@@ -101,8 +105,8 @@ def summary(rows, inv, rate_per_kg, tol_pct, master_name):
 
 
 def ordered(rows):
-    """Incorrect lines first, then invoice order."""
-    return sorted(rows, key=lambda r: (r["result"] == "CORRECT", r["invoice_no"] or "", r["sr"]))
+    """Similar models next to each other, then invoice order."""
+    return sorted(rows, key=lambda r: (model_sort_key(r.get("model")), r["invoice_no"] or "", r["sr"]))
 
 
 # ---------------------------------------------------------------- Excel
@@ -111,7 +115,7 @@ RESULT_FILL = {"CORRECT": PatternFill("solid", fgColor="C6EFCE"), "INCORRECT": P
 RESULT_FONT = {"CORRECT": Font(bold=True, color="006100"), "INCORRECT": Font(bold=True, color="9C0006")}
 CHECK_FILL = PatternFill("solid", fgColor="BDD7EE")
 BOLD = Font(bold=True)
-MONEY = "#,##0.00"
+MONEY = "#,##0"   # rupee amounts as whole numbers; kg/pc and Rs/kg keep 2 decimals
 
 COLS = [  # key, header, width, number format
     ("result", "Result", 12, None), ("status", "Reason", 18, None), ("invoice_no", "Invoice no", 14, None),
@@ -119,8 +123,8 @@ COLS = [  # key, header, width, number format
     ("matched_by", "Matched by", 15, None), ("master_desc", "Master description", 42, None),
     ("kg", "Kg / pc", 9, "0.00"), ("qty", "Qty", 7, "0"), ("expected_rate", "Expected rate", 13, MONEY),
     ("invoice_rate", "Invoice rate", 13, MONEY), ("diff", "Diff (inv - exp)", 13, MONEY),
-    ("diff_pct", "Diff %", 8, "0.00"), ("billed_per_kg", "Billed Rs/Kg", 11, MONEY),
-    ("total_kg", "Total kg", 10, "#,##0.00"), ("expected_value", "Expected value", 15, MONEY),
+    ("invoice_kg", "Invoice kg/pc", 11, "0.00"), ("billed_per_kg", "Billed Rs/Kg", 11, "0.00"),
+    ("total_kg", "Total kg", 10, "#,##0"), ("expected_value", "Expected value", 15, MONEY),
     ("invoice_value", "Invoice taxable value", 16, MONEY), ("value_diff", "Value diff", 13, MONEY),
 ]
 
@@ -137,7 +141,7 @@ def write_excel(path, rows, s, master, wb=None, weight=None):
     ws["A1"].font = Font(bold=True, size=14)
     all_ok = s["incorrect"] == 0
     ws.append(["Overall", "ALL CORRECT" if all_ok else f"{s['incorrect']} INCORRECT of {s['lines']}"])
-    ws.append(["Today's Rate/Kg", s["rate_per_kg"], "Tolerance %", s["tolerance_pct"], "Mastersheet", s["master_file"]])
+    ws.append(["Today's Rate/Kg", s["rate_per_kg"], "Match rule", "invoice kg/pc = master kg/pc (2 decimals)", "Mastersheet", s["master_file"]])
     ws.append(["Correct lines", s["correct"], "Incorrect lines", s["incorrect"], "Not in master", s["not_in_master"]])
     ws.append(["Total pcs", s["qty"], "Total kg", s["total_kg"], "Generated", s["generated"]])
     ws.append(["Expected value", s["expected_value"], "Invoice value", s["invoice_value"], "Difference", s["value_diff"]])
@@ -194,8 +198,8 @@ def write_excel(path, rows, s, master, wb=None, weight=None):
         if fmt:
             c.number_format = fmt
     ws.append([])
-    ws.append([f"Expected rate = Today's Rate/Kg x mastersheet Kg/pc. CORRECT when the invoice rate is within "
-               f"{s['tolerance_pct']}% of it."])
+    ws.append(["Expected rate = Today's Rate/Kg x mastersheet Kg/pc. CORRECT when invoice rate / Rate/Kg, rounded to "
+               "2 decimals, equals the mastersheet Kg/pc."])
     ws.append(["Blue 'Matched by' cells: item code not in the mastersheet, matched by description - check by eye."])
     ws.auto_filter.ref = f"A{hdr}:{ws.cell(hdr, len(COLS)).column_letter}{last}"
     ws.freeze_panes = ws.cell(row=hdr + 1, column=3)
@@ -279,7 +283,7 @@ def write_pdf(path, rows, s, recon=None, weight=None):
              "Loading Sheet & Invoice Rate Check" if recon else "Invoice Rate vs Mastersheet Check")
     doc = SimpleDocTemplate(path, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm,
                             topMargin=10 * mm, bottomMargin=10 * mm, title=title, author="mewreport")
-    money = lambda v: "" if v is None else f"{v:,.2f}"
+    money = lambda v: "" if v is None else f"{v:,.0f}"   # whole rupees / kg
     story = [Paragraph(title, ss["Title"])]
     if weight:   # the answer first: loaded vs billed kg and what explains the difference
         from weight_recon import pdf_story
@@ -290,7 +294,7 @@ def write_pdf(path, rows, s, recon=None, weight=None):
 
     overall = "ALL CORRECT" if s["incorrect"] == 0 else f"{s['incorrect']} INCORRECT of {s['lines']} lines"
     info = [
-        ["Overall", overall, "Today's Rate/Kg", money(s["rate_per_kg"]), "Tolerance", f"{s['tolerance_pct']}%"],
+        ["Overall", overall, "Today's Rate/Kg", f"{s['rate_per_kg']:,.2f}", "Match rule", "kg/pc equal (2 dp)"],
         ["Correct", s["correct"], "Incorrect", s["incorrect"], "Not in master", s["not_in_master"]],
         ["Total pcs", s["qty"], "Total kg", money(s["total_kg"]), "Generated", s["generated"]],
         ["Expected value", money(s["expected_value"]), "Invoice value", money(s["invoice_value"]),
@@ -315,7 +319,7 @@ def write_pdf(path, rows, s, recon=None, weight=None):
         story.append(Paragraph("Skipped duplicate upload: " + ", ".join(s["duplicates"]), small))
 
     head = ["Result", "Reason", "Invoice / Sr", "Item code", "Invoice description", "Matched by", "Kg/pc",
-            "Qty", "Expected rate", "Invoice rate", "Diff", "Diff %", "Value diff"]
+            "Qty", "Expected rate", "Invoice rate", "Diff", "Inv kg/pc", "Value diff"]
     data = [head]
     style = [("FONTSIZE", (0, 0), (-1, -1), 6.5), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
              ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -325,7 +329,7 @@ def write_pdf(path, rows, s, recon=None, weight=None):
                      Paragraph(r["desc"], small), Paragraph(r["matched_by"], small),
                      "" if r["kg"] is None else f"{r['kg']:.2f}", r["qty"], money(r["expected_rate"]),
                      money(r["invoice_rate"]), money(r["diff"]),
-                     "" if r["diff_pct"] is None else f"{r['diff_pct']:.2f}", money(r["value_diff"])])
+                     "" if r.get("invoice_kg") is None else f"{r['invoice_kg']:.2f}", money(r["value_diff"])])
         fill = green if r["result"] == "CORRECT" else red
         style += [("BACKGROUND", (0, n), (1, n), fill), ("BACKGROUND", (8, n), (11, n), fill)]
         if r["check"]:
@@ -336,9 +340,9 @@ def write_pdf(path, rows, s, recon=None, weight=None):
     t = Table(data, repeatRows=1, colWidths=[w * mm for w in widths])
     t.setStyle(TableStyle(style))
     story += [t, Spacer(0, 3 * mm), Paragraph(
-        f"Expected rate = Today's Rate/Kg x mastersheet Kg/pc. CORRECT when the invoice rate is within "
-        f"{s['tolerance_pct']}% of it. Blue 'Matched by': item code not in the mastersheet, matched by "
-        f"description - check by eye.", small)]
+        "Expected rate = Today's Rate/Kg x mastersheet Kg/pc. CORRECT when invoice rate / Rate/Kg, rounded to 2 "
+        "decimals, equals the mastersheet Kg/pc. Blue 'Matched by': item code not in the mastersheet, matched by "
+        "description - check by eye.", small)]
 
     def footer(canvas, doc_):
         canvas.setFont("Helvetica", 7)
@@ -355,31 +359,29 @@ def report_name(inv, prefix="rate_check"):
     return prefix + "_" + "_".join(nos[:3]) + ("_etc" if len(nos) > 3 else "")
 
 
-def _validate(rate_per_kg, tol_pct):
+def _validate(rate_per_kg):
     if rate_per_kg <= 0:
         raise ValueError("Rate/Kg must be greater than 0")
-    if tol_pct < 0:
-        raise ValueError("Tolerance cannot be negative")
 
 
-def run(master_src, master_name, invoices, names, rate_per_kg, tol_pct):
+def run(master_src, master_name, invoices, names, rate_per_kg):
     """Rate check on parsed invoice PDFs. Returns (rows, summary, master, inv)."""
-    _validate(rate_per_kg, tol_pct)
+    _validate(rate_per_kg)
     master = read_master(master_src, master_name)
     inv = combine_invoices(invoices, names)
-    rows = check(master, inv, rate_per_kg, tol_pct)
-    return rows, summary(rows, inv, rate_per_kg, tol_pct, master_name), master, inv
+    rows = check(master, inv, rate_per_kg)
+    return rows, summary(rows, inv, rate_per_kg, master_name), master, inv
 
 
-def run_on_step1(step1_src, master_src, master_name, rate_per_kg, tol_pct):
+def run_on_step1(step1_src, master_src, master_name, rate_per_kg):
     """Rate check on the invoice lines of a Step 1 report (reconciliation Excel).
     Returns (rows, summary, master, inv, step 1 workbook, step 1 reconciliation)."""
     from step1_report import read_step1
-    _validate(rate_per_kg, tol_pct)
+    _validate(rate_per_kg)
     wb, inv, recon = read_step1(step1_src)
     master = read_master(master_src, master_name)
-    rows = check(master, inv, rate_per_kg, tol_pct)
-    return rows, summary(rows, inv, rate_per_kg, tol_pct, master_name), master, inv, wb, recon
+    rows = check(master, inv, rate_per_kg)
+    return rows, summary(rows, inv, rate_per_kg, master_name), master, inv, wb, recon
 
 
 def main():
@@ -389,18 +391,17 @@ def main():
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--step1", help="Step 1 report (reconciliation .xlsx): writes the combined report")
     src.add_argument("--invoice", nargs="+", help="one or more tax invoice PDFs: writes the rate check only")
-    ap.add_argument("--tolerance", type=float, default=0.5, help="allowed difference in %% (default 0.5)")
     ap.add_argument("--out", help="output path without extension; .xlsx and .pdf are written")
     args = ap.parse_args()
 
     if args.step1:
         rows, s, master, inv, wb, recon = run_on_step1(args.step1, args.master, os.path.basename(args.master),
-                                                       args.rate, args.tolerance)
+                                                       args.rate)
         out = args.out or report_name(inv, "report")
     else:
         rows, s, master, inv = run(args.master, os.path.basename(args.master),
                                    [read_invoice(p) for p in args.invoice],
-                                   [os.path.basename(p) for p in args.invoice], args.rate, args.tolerance)
+                                   [os.path.basename(p) for p in args.invoice], args.rate)
         wb = recon = None
         out = args.out or report_name(inv)
     if os.path.dirname(out):

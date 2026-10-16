@@ -14,7 +14,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from rapidfuzz import fuzz
 
-from invoice_parser import combine_invoices, read_invoice
+from invoice_parser import combine_invoices, model_sort_key, read_invoice
 
 SUGGEST_SCORE = 75   # unmatched rows show the closest unmatched model above this as "possible match"
 
@@ -184,8 +184,8 @@ def write_report(path, rows, sheet, inv):
     hdr = ws.max_row
     for c in ws[hdr]:
         c.font = BOLD
-    # incorrect rows first, then partly / fully matched by hand, then correct; sheet order inside each
-    for r in sorted(rows, key=lambda r: (RESULT_ORDER[r["result"]], r.get("group", ""), r["line"] == "", r["line"] or 0)):
+    # similar models next to each other (the Result column and the filter still show what needs attention)
+    for r in sorted(rows, key=lambda r: model_sort_key(r.get("model") or r["invoice_model"] or r["sheet_model"])):
         ws.append([r.get(k, "") for k, _ in cols])
         cells = ws[ws.max_row]
         for c in cells[:9]:

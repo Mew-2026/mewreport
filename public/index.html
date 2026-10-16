@@ -108,7 +108,13 @@
   .card h2 { margin: 0; font-size: 18px; font-weight: 750; letter-spacing: -.01em; }
   .card .sub { color: var(--muted); margin: 8px 0 20px; font-size: 14px; min-height: 42px; }
   .card .actions { margin-top: auto; padding-top: 20px; }
-  .card > .pair { flex: 1; }   /* upload zones grow so both cards end level, with no empty gap */
+  .card > .pair { flex: 1; }
+  /* single input card: three upload zones of equal height, then rate and formula on one line */
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+  .row2 { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 16px; align-items: end; margin-top: 18px; }
+  .row2 .formula { margin: 0; min-height: var(--h-field); display: flex; align-items: center; }
+  @media (max-width: 980px) { .trio { grid-template-columns: 1fr 1fr; } .trio > .col:last-child { grid-column: 1 / -1; } .row2 { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .trio, .row2 { grid-template-columns: 1fr; } }
 
   /* two aligned columns: every label row has the same height, zones stretch to the same height */
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
@@ -224,6 +230,31 @@
   .stat.good b { color: var(--ok); } .stat.bad b { color: var(--bad); }
   .stat.good { background: color-mix(in srgb, var(--ok) 4%, var(--card)); } .stat.bad { background: color-mix(in srgb, var(--bad) 4%, var(--card)); }
 
+  /* collapsible loading-sheet editor */
+  .ed-toggle .chev { display: inline-block; transition: transform .25s; }
+  #editor.collapsed .ed-toggle .chev { transform: rotate(-90deg); }
+  #editor.collapsed .ed-wrap, #editor.collapsed > .msg { display: none; }
+  #editor:not(.collapsed) .ed-wrap { animation: rise .3s ease both; }
+  #ed-sum { font-weight: 700; color: var(--text); }
+  #ed-sum .ed-tag { margin-left: 6px; }
+  /* result tabs: Loading sheet vs invoices | Weight & rate check */
+  .tabbar { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 32px; padding: 6px; border-radius: var(--radius);
+            background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .tabbar[hidden] { display: none; }
+  .tabbar button { flex: 1 1 260px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 48px; padding: 0 16px;
+                   border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: 700 14.5px Inter, system-ui, sans-serif;
+                   cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+  .tabbar button:hover:not(:disabled) { background: var(--bg2); color: var(--text); }
+  .tabbar button[aria-selected="true"] { background: var(--tab, var(--blue)); color: var(--tab-ink, #fff); box-shadow: 0 4px 14px color-mix(in srgb, var(--tab, var(--blue)) 30%, transparent); }
+  .tabbar button:disabled { opacity: .5; cursor: not-allowed; }
+  .tabbar button[data-tab="result"] { --tab: #1f66e5; --tab-ink: #fff; }
+  .tabbar button[data-tab="result2"] { --tab: var(--sky); --tab-ink: #0b2545; }
+  .tabbar .tn { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 800;
+                background: color-mix(in srgb, currentColor 16%, transparent); }
+  .tabbar .tb { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: color-mix(in srgb, currentColor 14%, transparent); }
+  .tabbar .tb:empty { display: none; }
+  .result.show.off { display: none; }
+  #results-area .result { margin-top: 16px; }
   /* weight reconciliation */
   .weq { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 14px 16px; margin-bottom: 16px; font-size: 14px;
          background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -434,9 +465,9 @@
 
   <div class="steps">
     <form id="f" class="card" novalidate>
-      <div class="card-h"><div class="num">1</div><h2>Loading sheet vs invoices</h2></div>
-      <p class="sub">Add the loading sheet (photo or Excel) and every invoice PDF for this truck. The sheet is shown for checking before the match.</p>
-      <div class="pair">
+      <div class="card-h"><div class="num">↑</div><h2>Inputs for this load</h2></div>
+      <p class="sub">Everything for one truck in one place: the loading sheet, its invoice PDFs, and for the weight check the mastersheet and today's rate. The sheet is shown for checking before anything is matched.</p>
+      <div class="trio">
         <div class="col">
           <div class="lbl-row">
             <label class="lbl" id="sheet-lbl" for="sheet">Loading sheet</label>
@@ -471,20 +502,8 @@
             <div class="files"></div>
           </div>
         </div>
-      </div>
-      <div class="progress" id="prog"><i></i></div>
-      <div class="actions">
-        <button class="btn" id="go" type="submit"><span class="spin"></span><span id="go-t">Read loading sheet</span></button>
-        <div id="msg" class="msg"></div>
-      </div>
-    </form>
-
-    <form id="f2" class="card" novalidate>
-      <div class="card-h"><div class="num">2</div><h2>Weight &amp; rate check</h2></div>
-      <p class="sub">Loaded kg (sheet nos × master kg/pc) vs billed kg (invoice rate ÷ Rate/kg). Check 1 unit price, then Check 2 quantity.</p>
-      <div class="pair">
         <div class="col">
-          <div class="lbl-row"><label class="lbl" for="master">Mastersheet</label></div>
+          <div class="lbl-row"><label class="lbl" for="master">Mastersheet <span class="opt">· for the weight check</span></label></div>
           <div class="drop">
             <input id="master" type="file" accept=".xlsx,.xlsm,.csv">
             <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></div>
@@ -493,34 +512,30 @@
             <div class="files"></div>
           </div>
         </div>
-        <div class="col stack">
-          <div>
-            <div class="lbl-row"><label class="lbl" for="rate">Today's rate</label></div>
-            <div class="field"><input id="rate" type="number" step="0.01" min="0.01" inputmode="decimal" autocomplete="off"><span class="unit">Rs / Kg</span></div>
-          </div>
-          <div>
-            <div class="lbl-row"><label class="lbl" for="tol">Tolerance</label></div>
-            <div class="field"><input id="tol" type="number" step="0.01" min="0" value="0.5" inputmode="decimal"><span class="unit">%</span></div>
-          </div>
-        </div>
       </div>
-      <p class="formula">Expected rate = <b>Rate/Kg × mastersheet Kg</b> · CORRECT when the invoice Rate(Rs) is within the tolerance.</p>
-      <div class="src" id="srcwrap"><i></i><span id="src2"></span></div>
-      <div class="progress" id="prog2"><i></i></div>
+      <div class="row2">
+        <div>
+          <div class="lbl-row"><label class="lbl" for="rate">Today's rate</label></div>
+          <div class="field"><input id="rate" type="number" step="0.01" min="0.01" inputmode="decimal" autocomplete="off"><span class="unit">Rs / Kg</span></div>
+        </div>
+        <p class="formula">Loaded kg = <b>sheet nos × master kg/pc</b> · Billed kg = <b>invoice rate ÷ Rate/kg × nos</b> · Check 1 unit price (billed kg/pc = master kg/pc), then Check 2 quantity.</p>
+      </div>
+      <div class="progress" id="prog"><i></i></div>
       <div class="actions">
-        <button class="btn" id="go2" type="submit"><span class="spin"></span>Check rates</button>
-        <div id="msg2" class="msg"></div>
+        <button class="btn" id="go" type="submit"><span class="spin"></span><span id="go-t">Read loading sheet</span></button>
+        <div id="msg" class="msg"></div>
       </div>
     </form>
   </div>
 
   <section id="editor" class="result">
     <div class="result-h">
-      <div><h2>Check &amp; edit loading sheet</h2><div class="meta" id="ed-meta"></div></div>
+      <div><h2>Check &amp; edit loading sheet</h2><div class="meta"><span id="ed-meta"></span> · <span id="ed-sum"></span></div></div>
       <div class="dl">
+        <button type="button" class="btn sm ghost ed-toggle" id="ed-toggle" aria-expanded="true" aria-controls="ed-wrap"><span class="chev">▾</span><span id="ed-toggle-t">Hide rows</span></button>
         <button type="button" class="btn sm ghost" id="ed-reset">↺ Reset</button>
         <button type="button" class="btn sm ghost" id="ed-save">⬇ Save as Excel</button>
-        <button type="button" class="btn sm" id="ed-check"><span class="spin"></span>Check against invoices</button>
+        <button type="button" class="btn sm" id="ed-check"><span class="spin"></span>Run check</button>
       </div>
     </div>
     <div class="ed-wrap" id="ed-wrap">
@@ -546,9 +561,14 @@
     <div class="msg" id="ed-msg"></div>
   </section>
 
-  <section id="result" class="result">
+  <div id="results-area">
+  <div class="tabbar" id="tabbar" role="tablist" aria-label="Results" hidden>
+    <button type="button" role="tab" data-tab="result" aria-selected="true" aria-controls="result"><span class="tn">1</span>Loading sheet vs invoices<span class="tb" id="tb1"></span></button>
+    <button type="button" role="tab" data-tab="result2" aria-selected="false" aria-controls="result2" disabled title="Add the mastersheet and today's rate, then Run check"><span class="tn">2</span>Weight &amp; rate check<span class="tb" id="tb2"></span></button>
+  </div>
+  <section id="result" class="result" role="tabpanel">
     <div class="result-h">
-      <div><h2>Step 1 result · Loading sheet vs invoices</h2><div class="meta" id="title"></div><div id="verdict"></div></div>
+      <div><h2>Loading sheet vs invoices</h2><div class="meta" id="title"></div><div id="verdict"></div></div>
       <div class="dl"><a class="btn sm" id="dl" download>⬇ Excel report</a></div>
     </div>
     <div class="stats" id="stats"></div>
@@ -566,9 +586,9 @@
     <p class="note"><i></i>Models match only when they are the same battery (P at the end = Pro). Blue model cells: sheet text corrected to reach the model (e.g. ILTO → ILTJ). "Possible match" is a hint only. Tick incorrect rows (anywhere in the list) to match them by hand: net 0 → MATCHED, otherwise PARTLY MATCHED with the difference left.</p>
   </section>
 
-  <section id="result2" class="result">
+  <section id="result2" class="result" role="tabpanel">
     <div class="result-h">
-      <div><h2>Step 2 result · Weight &amp; rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
+      <div><h2>Weight &amp; rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
       <div class="dl"><a class="btn sm" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
     </div>
     <div id="warn2"></div>
@@ -584,7 +604,7 @@
       <colgroup><col style="width:9%"><col style="width:8%"><col style="width:11%"><col style="width:10%"><col style="width:20%"><col style="width:8%"><col style="width:5%"><col style="width:4%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:5%"></colgroup>
       <thead><tr>
         <th>Result</th><th>Reason</th><th>Invoice / Sr</th><th>Item code</th><th>Description</th><th>Matched by</th>
-        <th class="n">Kg/pc</th><th class="n">Qty</th><th class="n">Expected</th><th class="n">Invoice</th><th class="n">Diff</th><th class="n">Diff %</th>
+        <th class="n">Kg/pc</th><th class="n">Qty</th><th class="n">Expected</th><th class="n">Invoice</th><th class="n">Diff (Rs)</th><th class="n">Inv kg/pc</th>
       </tr></thead>
       <tbody id="rows2"></tbody>
     </table></div>
@@ -599,6 +619,7 @@
       <div id="nim"></div>
     </div>
   </section>
+  </div>
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-t"></span><button type="button" id="toast-undo">Undo</button></div>
@@ -628,6 +649,13 @@ setTheme(document.documentElement.dataset.theme || "auto");
 let data = null, filter = "ALL", q = "";
 let sheetMode = "photo";   // loading sheet as a photo (renamed.to) or a typed Excel (read directly)
 let invoices = [], invoicesKey = "";   // invoice PDFs read once, shared by step 1 and step 2
+// similar models sit together in every table: by the model number, then the letters after it, then before it
+function modelKey(m) {
+  m = String(m || "").toUpperCase();
+  const d = m.match(/\d{3,}/);
+  return d ? [0, Number(d[0]), m.slice(d.index + d[0].length), m.slice(0, d.index), m] : [1, 0, "", m, m];
+}
+const byModel = (a, b) => { const x = modelKey(a), y = modelKey(b); for (let k = 0; k < x.length; k++) { if (x[k] < y[k]) return -1; if (x[k] > y[k]) return 1; } return 0; };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const say = (t, err) => {   // Step 1 messages show in the card and, once it is open, in the editor
   for (const id of ["msg", "ed-msg"]) { $(id).className = err ? "msg err" : "msg"; $(id).textContent = t; }
@@ -673,10 +701,10 @@ function setMode(m) {
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
 try { if (localStorage.getItem("sheetmode") === "excel") setMode("excel"); } catch (e) {}
 
-function busy(n, on) {
-  $(n === 1 ? "go" : "go2").disabled = on;
-  if (n === 1) $("ed-check").disabled = on;
-  $(n === 1 ? "prog" : "prog2").classList.toggle("on", on);
+function busy(n, on) {   // one run button (and the editor's) for everything
+  $("go").disabled = on;
+  $("ed-check").disabled = on;
+  $("prog").classList.toggle("on", on);
 }
 
 // count numbers up when results appear
@@ -707,7 +735,12 @@ function filtersHTML(cur, rows) {
 const verdictHTML = (bad, total, unit) => bad === 0
   ? `<span class="verdict good">✔ All ${total} ${unit} correct</span>`
   : `<span class="verdict bad">✖ ${bad} of ${total} ${unit} incorrect</span>`;
-const signed = (v, f) => v == null ? "" : `<span class="${v > 0 ? "pos" : v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${f(v)}</span>`;
+const signed = (v, f) => {   // a value that rounds to 0 shows as plain 0 (never "-0" or "+0")
+  if (v == null) return "";
+  const t = String(f(v)).replace(/^-/, "");
+  if (/^0([.,]0+)?$/.test(t)) return `<span>${t}</span>`;
+  return `<span class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : "-"}${t}</span>`;
+};
 
 // Read the chosen invoice PDFs (no credits), unless this same selection was already read.
 async function readInvoices(status) {
@@ -785,9 +818,44 @@ function sheetEdits() {
 function edTotals() {
   const valid = sheet.rows.filter(r => r.model && Number(r.qty) > 0);
   const total = valid.reduce((t, r) => t + Number(r.qty), 0), edits = sheetEdits();
-  $("ed-total").innerHTML = `Total ${total.toLocaleString("en-IN")} pcs<small>${valid.length} rows</small>` +
-    (edits ? `<span class="ed-tag">${edits} change${edits > 1 ? "s" : ""}</span>` : "");
+  const tag = edits ? `<span class="ed-tag">${edits} change${edits > 1 ? "s" : ""}</span>` : "";
+  $("ed-total").innerHTML = `Total ${total.toLocaleString("en-IN")} pcs<small>${valid.length} rows</small>` + tag;
+  $("ed-sum").innerHTML = `Total ${total.toLocaleString("en-IN")} pcs in ${valid.length} rows` + tag;   // also shown when collapsed
 }
+function setCollapsed(c) {
+  $("editor").classList.toggle("collapsed", c);
+  $("ed-toggle").setAttribute("aria-expanded", String(!c));
+  $("ed-toggle-t").textContent = c ? "Show rows" : "Hide rows";
+}
+$("ed-toggle").addEventListener("click", () => setCollapsed(!$("editor").classList.contains("collapsed")));
+
+// ---------------- result tabs
+let activeTab = "result";
+function showTab(id) {
+  if (!$(id).classList.contains("show")) id = "result";
+  activeTab = id;
+  for (const t of ["result", "result2"]) {
+    $(t).classList.toggle("off", t !== id);
+    const b = document.querySelector(`.tabbar [data-tab="${t}"]`);
+    b.setAttribute("aria-selected", String(t === id));
+  }
+}
+function syncTabs() {   // which tabs exist, their status badges, and a valid active tab
+  const has1 = $("result").classList.contains("show"), has2 = $("result2").classList.contains("show");
+  $("tabbar").hidden = !has1 && !has2;
+  const b2 = document.querySelector('.tabbar [data-tab="result2"]');
+  b2.disabled = !has2; b2.title = has2 ? "" : "Add the mastersheet and today's rate, then Run check";
+  if (data) {
+    const open = data.rows.filter(r => r.result === "INCORRECT" || r.result === "PARTLY MATCHED").length;
+    $("tb1").textContent = open ? `${open} to check` : "all correct";
+  } else $("tb1").textContent = "";
+  if (has2 && rc) {
+    const v = rc.weight && rc.weight.summary.variance_kg;
+    $("tb2").textContent = rc.weight ? `${v > 0 ? "+" : ""}${kgf(v)} kg` : `${rc.summary.incorrect} incorrect`;
+  } else $("tb2").textContent = "";
+  showTab(activeTab);
+}
+document.querySelectorAll(".tabbar button").forEach(b => b.addEventListener("click", () => { if (!b.disabled) showTab(b.dataset.tab); }));
 
 function rowHTML(r, i) {
   const edited = r.orig_model === undefined || r.model !== r.orig_model || Number(r.qty) !== r.orig_qty;
@@ -813,7 +881,8 @@ function showEditor(first) {
   if (photo) { $("ed-img").onload = () => zoomTo("width"); $("ed-img").src = URL.createObjectURL(sheet.file); }
   $("ed-meta").textContent = `Read from ${photo ? "photo" : "Excel"} · ${sheet.file.name} · ${sheet.read} rows`;
   drawRows();
-  $("go-t").textContent = "Check against invoices";
+  setCollapsed(false);
+  $("go-t").textContent = "Run check";
   $("editor").classList.add("show");
   $("editor").scrollIntoView({ behavior: "smooth" });
   say(photo ? "Check the rows against the photo, fix anything misread, then Check against invoices."
@@ -930,10 +999,11 @@ $("f").addEventListener("submit", async e => {
   busy(1, true);
   try {
     if (!sheet) { await readSheet(); return; }   // first click: read and show the sheet for checking
+    if ($("master").files.length && !(Number($("rate").value) > 0)) throw new Error("Enter today's rate for the weight check (or remove the mastersheet)");
     const bad = sheet.rows.findIndex(r => (r.model || r.qty) && (!r.model || !(Number(r.qty) > 0)));
     if (bad >= 0) throw new Error(`Row ${bad + 1} needs a model and a quantity above 0`);
     await readInvoices(say);
-    $("result2").classList.remove("show");   // an earlier rate check was on another Step 1 outcome
+    $("result2").classList.remove("show"); syncTabs();   // an earlier rate check was on another Step 1 outcome
     say("Matching the loading sheet with the invoices…");
     const fd = new FormData();
     fd.append("sheet_rows", JSON.stringify(sheet.rows));
@@ -942,9 +1012,14 @@ $("f").addEventListener("submit", async e => {
     lastCheck = { sheet_rows: fd.get("sheet_rows"), sheet_meta: fd.get("sheet_meta"), invoices: fd.get("invoices") };
     groups = []; picked.clear(); $("toast").classList.remove("on");
     data = await post("/api/reconcile", fd); filter = "ALL"; q = ""; $("q").value = "";
-    render(); download(); showSource();
-    $("result").scrollIntoView({ behavior: "smooth" });
-    say(data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}` : "Done — Excel report downloaded.");
+    render();
+    if (weightReady()) { say("Checking weights and rates…"); await runWeight(); }
+    else { rc = null; $("result2").classList.remove("show"); }
+    setCollapsed(true); showTab("result"); syncTabs();
+    if (rc) $("dlx2").click(); else download();   // the fullest report downloads once per run
+    $("results-area").scrollIntoView({ behavior: "smooth" });
+    const dup = data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}. ` : "";
+    say(dup + (rc ? "Done — both tabs ready; combined Excel downloaded." : "Done — Excel report downloaded. Add the mastersheet and today's rate, then Run check again for the weight check."));
   } catch (err) {
     say(err.message, true);
   } finally { busy(1, false); }
@@ -981,7 +1056,8 @@ async function regroup(msg) {
     render(true); showSource();
     const bytes = Uint8Array.from(atob(data.xlsx), c => c.charCodeAt(0));   // report link now includes the groups
     $("dl").href = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    $("result2").classList.remove("show");   // a rate check made before is on the old Step 1 report
+    if (rc && weightReady()) await runWeight();   // the weight tab follows the new groups (no credits)
+    else { $("result2").classList.remove("show"); syncTabs(); }
     say(msg);
   } catch (err) {
     say(err.message, true);
@@ -1080,7 +1156,7 @@ function render(animate = true) {
   const needle = q.toLowerCase();
   const rows = d.rows.map((r, i) => ({ r, i })).filter(({ r }) => filter === "ALL" || r.result === filter)
     .filter(({ r }) => !needle || [r.sheet_model, r.invoice_model, r.sheet_lines, r.invoice_lines, r.status, r.group, r.note, r.suggest].join(" ").toLowerCase().includes(needle))
-    .sort((a, b) => ORDER[a.r.result] - ORDER[b.r.result] || String(a.r.group || "").localeCompare(String(b.r.group || ""), undefined, { numeric: true }));
+    .sort((a, b) => byModel(a.r.model || a.r.invoice_model || a.r.sheet_model, b.r.model || b.r.invoice_model || b.r.sheet_model));
   $("rows").innerHTML = rows.length ? rows.map(({ r, i }, n) => `
     <tr class="${r.check ? "check " : ""}${ROWCLS[r.result]}${picked.has(i) ? " sel" : ""}" style="animation-delay:${animate ? Math.min(n, 30) * 18 : 0}ms">
       <td class="pick" data-l="Pick">${r.result === "INCORRECT" ? `<input type="checkbox" data-i="${i}" ${picked.has(i) ? "checked" : ""} aria-label="Pick row ${esc(r.sheet_model || r.invoice_model)} for a manual match">` : ""}</td>
@@ -1092,6 +1168,7 @@ function render(animate = true) {
       <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}${r.suggest && !r.group ? `<span class="hint">possible match: <b>${esc(r.suggest)}</b></span>` : ""}</td><td data-l="Invoice Sr.">${esc(r.invoice_lines)}</td>
     </tr>`).join("") : `<tr><td class="empty" colspan="10">No rows match.</td></tr>`;
   $("result").classList.add("show");
+  syncTabs();
   selbar();
 }
 $("rows").addEventListener("change", e => {
@@ -1110,14 +1187,11 @@ $("q").addEventListener("input", e => { q = e.target.value; render(false); });
 
 // ---------------- Step 2: rate check
 let rc = null, filter2 = "ALL", q2 = "";
-const say2 = (t, err) => { $("msg2").className = err ? "msg err" : "msg"; $("msg2").textContent = t; };
-const money = v => v == null ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const say2 = say;
+const money = v => v == null ? "" : Math.round(Number(v)).toLocaleString("en-IN");   // whole rupees
+const kgpc = v => v == null ? "" : Number(v).toFixed(2);                                // kg per piece: 2 decimals
 
-// today's rate always starts empty (it changes daily); only the tolerance is remembered on this computer
-try {
-  const saved = JSON.parse(localStorage.getItem("ratecheck") || "{}");
-  if (saved.tol != null && saved.tol !== "") $("tol").value = saved.tol;
-} catch (e) {}
+// today's rate always starts empty (it changes daily)
 
 function blobLink(id, b64, type, name) {
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
@@ -1125,66 +1199,39 @@ function blobLink(id, b64, type, name) {
   $(id).download = name;
 }
 
-// Step 2 uses the Step 1 result on this page (combined report); without it, the invoice PDFs chosen in Step 1.
-function step1File() {
-  if (!data) return null;
-  const bytes = Uint8Array.from(atob(data.xlsx), c => c.charCodeAt(0));
-  return new File([bytes], data.filename, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+// The weight & rate check runs with the Step 1 result whenever the mastersheet and today's rate are given.
+const weightReady = () => $("master").files.length > 0 && Number($("rate").value) > 0;
+function showSource() {}   // (kept for older call sites)
+
+async function runWeight() {
+  if (!weightReady() || !data || !lastCheck) { rc = null; $("result2").classList.remove("show"); syncTabs(); return false; }
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(lastCheck)) fd.append(k, v);
+  fd.append("groups", JSON.stringify(groups));
+  fd.append("master", $("master").files[0]);
+  fd.append("rate", $("rate").value);
+  rc = await post("/api/ratecheck", fd); filter2 = "ALL"; q2 = ""; $("q2").value = "";
+  $("dlx2").textContent = rc.combined ? "⬇ Combined Excel" : "⬇ Excel report";
+  $("dlp2").textContent = rc.combined ? "⬇ Combined PDF" : "⬇ PDF report";
+  blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
+  blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
+  render2();
+  syncTabs();
+  return true;
 }
 
-function showSource() {
-  const n = $("invoice").files.length;
-  $("srcwrap").classList.toggle("ready", Boolean(data || n));
-  $("srcwrap").hidden = !(data || n);   // nothing to say until invoices are chosen
-  $("src2").textContent = data ? `Uses the Step 1 result (${data.filename}) — combined Excel + PDF`
-    : n ? `Uses the ${n} invoice PDF${n > 1 ? "s" : ""} chosen in Step 1 — Step 1 need not be run` : "";
-}
-$("invoice").addEventListener("change", () => { if (!data) showSource(); });
-showSource();
-
-$("f2").addEventListener("submit", async e => {
-  e.preventDefault();
-  const step1 = step1File();
-  if (!step1 && !$("invoice").files.length) return say2("Choose the invoice PDFs in Step 1", true);
-  if (!$("master").files.length) return say2("Choose the mastersheet", true);
-  if (!(Number($("rate").value) > 0)) return say2("Enter today's rate per kg", true);
-  busy(2, true);
-  try {
-    const fd = new FormData();
-    if (data && lastCheck) {   // full check from the Step 1 result on the page: weight reconciliation too
-      for (const [k, v] of Object.entries(lastCheck)) fd.append(k, v);
-      fd.append("groups", JSON.stringify(groups));
-    } else fd.append("invoices", JSON.stringify(await readInvoices(say2)));
-    say2("Checking weights and rates…");
-    try { localStorage.setItem("ratecheck", JSON.stringify({ tol: $("tol").value })); } catch (e) {}
-    fd.append("master", $("master").files[0]);
-    fd.append("rate", $("rate").value);
-    fd.append("tolerance", $("tol").value);
-    rc = await post("/api/ratecheck", fd); filter2 = "ALL"; q2 = ""; $("q2").value = "";
-    $("dlx2").textContent = rc.combined ? "⬇ Combined Excel" : "⬇ Excel report";
-    $("dlp2").textContent = rc.combined ? "⬇ Combined PDF" : "⬇ PDF report";
-    blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
-    blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
-    render2();
-    $("result2").scrollIntoView({ behavior: "smooth" });
-    say2("Done.");
-  } catch (err) {
-    say2(err.message, true);
-  } finally { busy(2, false); }
-});
-
-const kgf = v => v == null ? "" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const kgf = v => v == null ? "" : Math.round(Number(v)).toLocaleString("en-IN");      // whole kg
 function renderWeight() {
   const w = rc.weight;
   $("wbox").hidden = $("check2").hidden = !w;
   if (!w) { $("gate").innerHTML = ""; return; }
   const s = w.summary, v = s.variance_kg;
   $("wstats").innerHTML = statsHTML([
-    [s.loaded_kg, `Loaded kg · ${s.loaded_pcs_weighed} of ${s.loaded_pcs} pcs weighed`, "brand", 2], [s.billed_kg, `Billed kg · ${s.billed_pcs} pcs on invoice`, "brand", 2],
-    [v, "Variance (billed − loaded)", Math.abs(v) < 0.005 ? "good" : "bad", 2, true],
-    [s.price_kg, "Check 1 · unit price (kg)", s.price_issues ? "bad" : "good", 2, true],   // a few hundredths of a kg are rounding
-    [s.qty_kg, "Check 2 · quantity (kg)", Math.abs(s.qty_kg) < 0.005 ? "good" : "bad", 2, true],
-    ...(s.not_in_master_kg ? [[s.not_in_master_kg, "Billed, not in master (kg)", "bad", 2, true]] : []),
+    [s.loaded_kg, `Loaded kg · ${s.loaded_pcs_weighed} of ${s.loaded_pcs} pcs weighed`, "brand"], [s.billed_kg, `Billed kg · ${s.billed_pcs} pcs on invoice`, "brand"],
+    [v, "Variance (billed − loaded)", v === 0 ? "good" : "bad", 0, true],
+    [s.price_kg, "Check 1 · unit price (kg)", s.price_issues ? "bad" : "good", 0, true],
+    [s.qty_kg, "Check 2 · quantity (kg)", s.qty_kg === 0 ? "good" : "bad", 0, true],
+    ...(s.not_in_master_kg ? [[s.not_in_master_kg, "Billed, not in master (kg)", "bad", 0, true]] : []),
   ]);
   $("wstats").querySelectorAll("b[data-v]").forEach(countUp);
   const sg = x => (x > 0 ? "+" : "") + kgf(x);
@@ -1195,25 +1242,25 @@ function renderWeight() {
   $("gate").innerHTML = s.price_issues
     ? `<div class="gate bad">⚠ ${s.price_issues} model${s.price_issues > 1 ? "s have" : " has"} a unit price that does not match the master (${sg(s.price_kg)} kg). Resolve these first — Check 2 assumes the master weights.</div>`
     : `<div class="gate ok">✔ Unit prices match the master for every model — Check 2 below explains the variance.</div>`;
-  const ms = [...w.models].filter(m => m.master_kg != null).sort((a, b) => Math.abs(b.qty_kg) - Math.abs(a.qty_kg));
+  const ms = [...w.models].filter(m => m.master_kg != null).sort((a, b) => byModel(a.model, b.model));
   $("wrows").innerHTML = ms.map((m, n) => `
     <tr class="${m.qty_status === "OK" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(n, 30) * 15}ms">
       <td class="mono" data-l="Model">${esc(m.model)}</td>
       <td data-l="Status"><span class="pill ${m.qty_status === "OK" ? "OK" : "BAD"}">${esc(m.qty_status)}</span></td>
       <td class="n" data-l="Sheet qty">${m.sheet_qty}</td><td class="n" data-l="Invoice qty">${m.invoice_qty}</td>
-      <td class="n" data-l="Diff">${signed(m.qty_diff, x => x)}</td><td class="n" data-l="Master kg/pc">${kgf(m.master_kg)}</td>
+      <td class="n" data-l="Diff">${signed(m.qty_diff, x => x)}</td><td class="n" data-l="Master kg/pc">${kgpc(m.master_kg)}</td>
       <td class="n" data-l="Effect (kg)">${signed(m.qty_kg, kgf)}</td>
       <td data-l="Group / note">${esc([m.group, m.note].filter(Boolean).join(" · "))}</td>
     </tr>`).join("");
   const nim = s.sheet_not_in_master;
   $("nim").innerHTML = nim.length ? `<div class="nim">Loading sheet models <b>not in the master sheet</b> — no weight, so left out of the loaded kg (listed in the Excel "Master sheet (loaded)" tab):
-    ${nim.map(m => `<b>${esc(m.model)}</b> × ${m.sheet_qty}`).join(" · ")}</div>` : "";
+    ${[...nim].sort((a, b) => byModel(a.model, b.model)).map(m => `<b>${esc(m.model)}</b> × ${m.sheet_qty}`).join(" · ")}</div>` : "";
 }
 
 function render2(animate = true) {
   if (animate) renderWeight();
   const s = rc.summary;
-  $("title2").textContent = `${rc.step1_file} · Rate ${money(s.rate_per_kg)} / Kg · tolerance ${s.tolerance_pct}% · ${s.master_file}`;
+  $("title2").textContent = `${rc.step1_file} · Rate ${Number(s.rate_per_kg).toFixed(2)} / Kg · ${s.master_file}`;
   const wv = rc.weight && rc.weight.summary.variance_kg;
   $("verdict2").innerHTML = (rc.weight ? (Math.abs(wv) < 0.005 ? `<span class="verdict good">✔ Billed weight equals loaded weight</span>`
       : `<span class="verdict bad">${wv > 0 ? "▲" : "▼"} ${wv > 0 ? "+" : ""}${kgf(wv)} kg billed ${wv > 0 ? "more" : "less"} than loaded</span>`) : "") +
@@ -1227,8 +1274,8 @@ function render2(animate = true) {
     $("warn2").innerHTML = warn.length ? `<div class="warn">${warn.map(esc).join("<br>")}</div>` : "";
     $("stats2").innerHTML = statsHTML([
       [s.lines, "Invoice lines", "brand"], [s.correct, "Correct", "good"], [s.incorrect, "Incorrect", s.incorrect ? "bad" : "good"],
-      [s.expected_value, "Expected value (Rs)", "brand", 2], [s.invoice_value, "Invoice value (Rs)", "brand", 2],
-      [s.value_diff, "Difference (Rs)", Math.abs(s.value_diff) < 0.005 ? "good" : "bad", 2, true],
+      [s.expected_value, "Expected value (Rs)", "brand"], [s.invoice_value, "Invoice value (Rs)", "brand"],
+      [s.value_diff, "Difference (Rs)", Math.round(s.value_diff) === 0 ? "good" : "bad", 0, true],
     ]);
     $("stats2").querySelectorAll("b[data-v]").forEach(countUp);
   }
@@ -1243,12 +1290,13 @@ function render2(animate = true) {
       <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}</td>
       <td data-l="Invoice / Sr">${esc(r.invoice_no)} / ${esc(r.sr)}</td><td class="mono" data-l="Item code">${esc(r.code)}</td>
       <td data-l="Description">${esc(r.desc)}</td><td class="m" data-l="Matched by">${esc(r.matched_by)}</td>
-      <td class="n" data-l="Kg/pc">${r.kg == null ? "" : r.kg.toFixed(2)}</td><td class="n" data-l="Qty">${r.qty}</td>
+      <td class="n" data-l="Kg/pc">${kgpc(r.kg)}</td><td class="n" data-l="Qty">${r.qty}</td>
       <td class="n" data-l="Expected">${money(r.expected_rate)}</td><td class="n" data-l="Invoice">${money(r.invoice_rate)}</td>
       <td class="n" data-l="Diff">${signed(r.diff, money)}</td>
-      <td class="n" data-l="Diff %">${signed(r.diff_pct, v => v.toFixed(2))}</td>
+      <td class="n" data-l="Inv kg/pc">${kgpc(r.invoice_kg)}</td>
     </tr>`).join("") : `<tr><td class="empty" colspan="12">No lines match.</td></tr>`;
   $("result2").classList.add("show");
+  syncTabs();
 }
 $("q2").addEventListener("input", e => { q2 = e.target.value; render2(false); });
 </script>
