@@ -121,6 +121,11 @@
   .seg { display: inline-flex; height: 32px; padding: 3px; border-radius: 9px; background: var(--bg2); border: 1px solid var(--line); flex: none; }
   .seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; padding: 0 14px; border-radius: 6px; cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
   .seg button[aria-selected="true"] { background: var(--card); color: var(--accent-ink); box-shadow: 0 1px 3px rgba(13, 27, 46, .14); }
+  /* dark: a card-coloured pill disappears on a card, so the chosen option is filled with the accent */
+  :root[data-theme="dark"] .seg button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .seg button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+  }
   .fmt { position: relative; z-index: 2; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--accent-ink); text-decoration: none; padding: 5px 12px; border-radius: 99px;
          background: color-mix(in srgb, var(--accent) 12%, transparent); transition: background .2s; }
   .fmt:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
