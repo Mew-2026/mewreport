@@ -202,19 +202,30 @@
   .empty { padding: 28px; text-align: center; color: var(--muted); }
 
   /* ---------- loading sheet editor */
-  .ed-wrap { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 18px; align-items: start; }
+  /* side by side: photo (pinned, zoomable) | editable rows, half the width each */
+  .ed-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   .ed-wrap.no-photo { grid-template-columns: 1fr; }
-  .ed-photo { margin: 0; position: sticky; top: calc(var(--hdr, 69px) + 12px); background: var(--card); border: 1px solid var(--line);
-              border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; animation: pop .4s ease both; }
-  .ed-photo img { display: block; width: 100%; max-height: calc(100vh - 170px); object-fit: contain; border-radius: 10px; cursor: zoom-in; }
-  .ed-photo figcaption { text-align: center; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .ed-photo { margin: 0; position: sticky; top: calc(var(--hdr, 69px) + 12px); height: calc(100vh - var(--hdr, 69px) - 24px); min-height: 420px;
+              display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line);
+              border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; animation: pop .4s ease both; }
+  .ed-photo[hidden] { display: none; }
+  .ed-tools { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--card) 92%, var(--bg2)); }
+  .ed-tools b { font-size: 13px; margin-right: auto; }
+  .ed-tools button { height: 30px; min-width: 30px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text);
+                     font: 700 13px Inter, system-ui, sans-serif; cursor: pointer; transition: border-color .15s, color .15s; }
+  .ed-tools button:hover { border-color: var(--accent); color: var(--accent); }
+  .ed-tools .zl { min-width: 46px; text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ed-view { flex: 1; overflow: auto; cursor: grab; background: repeating-conic-gradient(var(--bg2) 0 25%, transparent 0 50%) 0 0 / 16px 16px; touch-action: pan-x pan-y; }
+  .ed-view.drag { cursor: grabbing; }
+  .ed-view img { display: block; max-width: none; margin: 0 auto; user-select: none; -webkit-user-drag: none; }
+  .ed-photo figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); text-align: center; }
   .ed-main { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; min-width: 0; }
   .ed-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 12px; }
   .ed-total { font-weight: 800; font-size: 15px; }
   .ed-total small { color: var(--muted); font-weight: 600; font-size: 13px; margin-left: 6px; }
   .ed-hint { color: var(--muted); font-size: 13px; }
   .ed-tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--warn-bg); color: var(--warn); margin-left: 6px; }
-  .ed-grid { columns: 250px; column-gap: 14px; }   /* fills down each column, like the paper */
+  .ed-grid { columns: 230px; column-gap: 14px; }   /* fills down each column, like the paper */
   .ed-row { break-inside: avoid; display: grid; grid-template-columns: 30px 1fr 74px 30px; gap: 6px; align-items: center;
             padding: 4px 6px; margin-bottom: 4px; border-radius: 10px; border: 1px solid transparent; transition: background .2s, border-color .2s; animation: fadeRow .3s ease both; }
   .ed-row:hover { background: var(--row-hover); }
@@ -232,7 +243,7 @@
   #editor .msg { margin-top: 12px; }
   .lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(8, 15, 26, .82); display: grid; place-items: center; padding: 20px; cursor: zoom-out; animation: pop .2s ease both; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: var(--shadow-lg); }
-  @media (max-width: 860px) { .ed-wrap { grid-template-columns: 1fr; } .ed-photo { position: static; } .ed-photo img { max-height: 320px; } }
+  @media (max-width: 700px) { .ed-wrap { grid-template-columns: 1fr; } .ed-photo { position: static; height: 60vh; min-height: 320px; } }
 
   /* narrow screens: each row becomes a card, so nothing scrolls sideways */
   @media (max-width: 860px) {
@@ -367,7 +378,19 @@
       </div>
     </div>
     <div class="ed-wrap" id="ed-wrap">
-      <figure class="ed-photo" id="ed-photo" hidden><img id="ed-img" alt="Loading sheet photo"><figcaption>Click the photo to enlarge</figcaption></figure>
+      <figure class="ed-photo" id="ed-photo" hidden>
+        <div class="ed-tools">
+          <b>Photo</b>
+          <button type="button" id="z-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <span class="zl" id="z-lvl">100%</span>
+          <button type="button" id="z-in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" id="z-width" title="Fit to width">Width</button>
+          <button type="button" id="z-page" title="Show whole page">Page</button>
+          <button type="button" id="z-full" title="Full screen" aria-label="Full screen">⛶</button>
+        </div>
+        <div class="ed-view" id="ed-view"><img id="ed-img" alt="Loading sheet photo" draggable="false"></div>
+        <figcaption>Drag to move · Ctrl + scroll or +/− to zoom · double-click to zoom in</figcaption>
+      </figure>
       <div class="ed-main">
         <div class="ed-bar"><span class="ed-total" id="ed-total"></span><span class="ed-hint">Correct anything misread — the check uses these rows. Enter moves to the next row.</span></div>
         <div class="ed-grid" id="ed-grid"></div>
@@ -604,7 +627,7 @@ function showEditor(first) {
   const photo = sheet.source === "photo";
   $("ed-photo").hidden = !photo;
   $("ed-wrap").classList.toggle("no-photo", !photo);
-  if (photo) $("ed-img").src = URL.createObjectURL(sheet.file);
+  if (photo) { $("ed-img").onload = () => zoomTo("width"); $("ed-img").src = URL.createObjectURL(sheet.file); }
   $("ed-meta").textContent = `Read from ${photo ? "photo" : "Excel"} · ${sheet.file.name} · ${sheet.read} rows`;
   drawRows();
   $("go-t").textContent = "Check against invoices";
@@ -652,7 +675,50 @@ $("ed-reset").addEventListener("click", () => {   // back to the rows as read (n
   sheet.rows = sheet.original.map(r => ({ ...r }));
   drawRows();
 });
-$("ed-img").addEventListener("click", () => {
+// ---- photo viewer: zoom (buttons, Ctrl + wheel, double-click) and drag to move, so each row can be compared
+let zoom = 1;
+function zoomTo(how, cx, cy) {
+  const img = $("ed-img"), view = $("ed-view");
+  if (!img.naturalWidth) return;
+  const fitW = (view.clientWidth - 2) / img.naturalWidth, fitP = Math.min(fitW, (view.clientHeight - 2) / img.naturalHeight);
+  // keep the point under the cursor (or the centre) in place while zooming
+  const px = cx ?? view.clientWidth / 2, py = cy ?? view.clientHeight / 2;
+  const fx = (view.scrollLeft + px) / (img.naturalWidth * zoom), fy = (view.scrollTop + py) / (img.naturalHeight * zoom);
+  zoom = how === "width" ? fitW : how === "page" ? fitP : Math.min(4, Math.max(fitP, how));
+  img.style.width = Math.round(img.naturalWidth * zoom) + "px";
+  if (typeof how === "number") { view.scrollLeft = fx * img.naturalWidth * zoom - px; view.scrollTop = fy * img.naturalHeight * zoom - py; }
+  $("z-lvl").textContent = Math.round(zoom * 100) + "%";
+}
+$("z-in").addEventListener("click", () => zoomTo(zoom * 1.25));
+$("z-out").addEventListener("click", () => zoomTo(zoom / 1.25));
+$("z-width").addEventListener("click", () => zoomTo("width"));
+$("z-page").addEventListener("click", () => zoomTo("page"));
+addEventListener("resize", () => { if (!$("ed-photo").hidden) zoomTo(zoom); });
+$("ed-view").addEventListener("wheel", e => {
+  if (!e.ctrlKey) return;   // plain wheel scrolls the photo
+  e.preventDefault();
+  const b = $("ed-view").getBoundingClientRect();
+  zoomTo(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - b.left, e.clientY - b.top);
+}, { passive: false });
+$("ed-view").addEventListener("dblclick", e => {
+  const b = $("ed-view").getBoundingClientRect();
+  zoomTo(zoom * 1.6, e.clientX - b.left, e.clientY - b.top);
+});
+(() => {   // drag to move
+  const view = $("ed-view"); let start = null;
+  view.addEventListener("pointerdown", e => {
+    if (e.pointerType === "touch") return;   // touch screens scroll natively
+    start = { x: e.clientX, y: e.clientY, l: view.scrollLeft, t: view.scrollTop };
+    view.classList.add("drag"); view.setPointerCapture(e.pointerId);
+  });
+  view.addEventListener("pointermove", e => {
+    if (!start) return;
+    view.scrollLeft = start.l - (e.clientX - start.x); view.scrollTop = start.t - (e.clientY - start.y);
+  });
+  const end = () => { start = null; view.classList.remove("drag"); };
+  view.addEventListener("pointerup", end); view.addEventListener("pointercancel", end);
+})();
+$("z-full").addEventListener("click", () => {
   const box = document.createElement("div");
   box.className = "lightbox";
   box.innerHTML = `<img src="${$("ed-img").src}" alt="Loading sheet photo">`;
