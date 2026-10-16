@@ -285,9 +285,11 @@ def write_pdf(path, rows, s, recon=None, weight=None):
                             topMargin=10 * mm, bottomMargin=10 * mm, title=title, author="mewreport")
     money = lambda v: "" if v is None else f"{v:,.0f}"   # whole rupees / kg
     story = [Paragraph(title, ss["Title"])]
-    if weight:   # the answer first: loaded vs billed kg and what explains the difference
-        from weight_recon import pdf_story
-        story += pdf_story(weight, ss, small, colors, mm, Paragraph, Spacer, Table, TableStyle) + [PageBreak()]
+    if weight:   # the answer first: the weight gap report, as sent to the company
+        from reportlab.platypus import KeepTogether
+        from weight_recon import company_story
+        story = company_story(weight, s["invoices"], ss, colors, mm, Paragraph, Spacer, Table, TableStyle,
+                              KeepTogether, PageBreak) + [PageBreak()]
     if recon:
         story += _recon_story(recon, ss, small, colors, mm, Paragraph, Spacer, Table, TableStyle)
         story += [PageBreak(), Paragraph("Check 1 detail · Invoice rate vs mastersheet, line by line", ss["Heading2"])]

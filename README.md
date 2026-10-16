@@ -55,6 +55,12 @@ and produces an Excel reconciliation report.
    sheet models not in the master listed below); the PDF opens with the weight answer
    (`rate_check.py`, `mastersheet.py`, `step1_report.py`).
 
+**Report for company (PDF)**: one A4 report to send to the company - loaded vs invoiced kg (and Rs at
+today's Rate/Kg), the difference split into **A. quantity** (pieces invoiced vs loaded, per model) and
+**B. unit price** (each invoice line's rate / Rate/Kg vs the standard kg/pc of its item code; an item code
+missing from the master is compared with the same model's closest master row), how it is calculated, the
+models not in the master, and a model-wise annexure. The combined PDF opens with the same report.
+
 Every table on the page - the loading sheet, Loading sheet vs invoices, Check 1 (unit price, line by
 line) and Check 2 (quantity in kg) - has **Excel** and **PDF** buttons. They export exactly what the
 table shows (filter and search applied, noted in the file), with the load details, whole-number kg and

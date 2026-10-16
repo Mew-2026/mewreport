@@ -594,7 +594,7 @@
   <section id="result2" class="result" role="tabpanel">
     <div class="result-h">
       <div><h2>Weight &amp; rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
-      <div class="dl"><a class="btn sm" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
+      <div class="dl"><a class="btn sm" id="dlr2" download hidden>⬇ Report for company (PDF)</a><a class="btn sm ghost" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
     </div>
     <div id="warn2"></div>
     <div id="wbox" hidden>
@@ -1223,6 +1223,8 @@ async function runWeight() {
   $("dlp2").textContent = rc.combined ? "⬇ Combined PDF" : "⬇ PDF report";
   blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
   blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
+  $("dlr2").hidden = !rc.report_pdf;
+  if (rc.report_pdf) blobLink("dlr2", rc.report_pdf, "application/pdf", rc.filename.replace(/^report/, "weight_report") + ".pdf");
   render2();
   syncTabs();
   return true;
@@ -1236,16 +1238,16 @@ function renderWeight() {
   const s = w.summary, v = s.variance_kg;
   $("wstats").innerHTML = statsHTML([
     [s.loaded_kg, `Loaded kg · ${s.loaded_pcs_weighed} of ${s.loaded_pcs} pcs weighed`, "brand"], [s.billed_kg, `Billed kg · ${s.billed_pcs} pcs on invoice`, "brand"],
-    [v, "Variance (billed − loaded)", v === 0 ? "good" : "bad", 0, true],
-    [s.price_kg, "Check 1 · unit price (kg)", s.price_issues ? "bad" : "good", 0, true],
-    [s.qty_kg, "Check 2 · quantity (kg)", s.qty_kg === 0 ? "good" : "bad", 0, true],
+    [v, "Difference (invoiced − loaded)", v === 0 ? "good" : "bad", 0, true],
+    [s.qty_kg, "Quantity difference (kg)", s.qty_kg === 0 ? "good" : "bad", 0, true],
+    [s.price_kg, "Unit price difference (kg)", s.price_issues ? "bad" : "good", 0, true],
     ...(s.not_in_master_kg ? [[s.not_in_master_kg, "Billed, not in master (kg)", "bad", 0, true]] : []),
   ]);
   $("wstats").querySelectorAll("b[data-v]").forEach(countUp);
   const sg = x => (x > 0 ? "+" : "") + kgf(x);
-  $("weq").innerHTML = `<span class="t">Variance</span><span class="part big"><b>${sg(v)} kg</b></span><span class="op">=</span>
-    <span class="part"><small>Check 1 price</small><b>${sg(s.price_kg)} kg</b></span><span class="op">+</span>
-    <span class="part"><small>Check 2 qty</small><b>${sg(s.qty_kg)} kg</b></span>` +
+  $("weq").innerHTML = `<span class="t">Difference</span><span class="part big"><b>${sg(v)} kg</b></span><span class="op">=</span>
+    <span class="part"><small>quantity</small><b>${sg(s.qty_kg)} kg</b></span><span class="op">+</span>
+    <span class="part"><small>unit price</small><b>${sg(s.price_kg)} kg</b></span>` +
     (s.not_in_master_kg ? `<span class="op">+</span><span class="part"><small>not in master</small><b>${sg(s.not_in_master_kg)} kg</b></span>` : "");
   $("gate").innerHTML = s.price_issues
     ? `<div class="gate bad">⚠ ${s.price_issues} model${s.price_issues > 1 ? "s have" : " has"} a unit price that does not match the master (${sg(s.price_kg)} kg). Resolve these first — Check 2 assumes the master weights.</div>`
