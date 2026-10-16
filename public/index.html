@@ -167,6 +167,7 @@
   .formula b { color: var(--accent-ink); }
   .src { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 20px; }
   .src i { width: 8px; height: 8px; border-radius: 50%; background: var(--line2); flex: none; }
+  .src[hidden] { display: none; }
   .src.ready i { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); }
 
   /* ============ buttons: one height per size, everywhere */
@@ -1007,9 +1008,9 @@ function step1File() {
 function showSource() {
   const n = $("invoice").files.length;
   $("srcwrap").classList.toggle("ready", Boolean(data || n));
+  $("srcwrap").hidden = !(data || n);   // nothing to say until invoices are chosen
   $("src2").textContent = data ? `Uses the Step 1 result (${data.filename}) — combined Excel + PDF`
-    : n ? `Uses the ${n} invoice PDF${n > 1 ? "s" : ""} chosen in Step 1 — Step 1 need not be run`
-    : "Choose the invoice PDFs in Step 1 first — running Step 1 is optional";
+    : n ? `Uses the ${n} invoice PDF${n > 1 ? "s" : ""} chosen in Step 1 — Step 1 need not be run` : "";
 }
 $("invoice").addEventListener("change", () => { if (!data) showSource(); });
 showSource();
