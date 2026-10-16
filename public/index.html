@@ -1255,14 +1255,14 @@ function renderWeight() {
   $("wrows").innerHTML = ms.map((m, n) => `
     <tr class="${m.qty_status === "OK" ? "good-row" : "bad-row"}" style="animation-delay:${Math.min(n, 30) * 15}ms">
       <td class="mono" data-l="Model">${esc(m.model)}</td>
-      <td data-l="Status"><span class="pill ${m.qty_status === "OK" ? "OK" : "BAD"}">${esc(m.qty_status)}</span></td>
+      <td data-l="Status"><span class="pill ${m.qty_status === "OK" ? "OK" : "BAD"}">${esc(m.qty_status)}</span>${m.kg_source !== "master" ? ` <span class="pill PART" title="${esc(m.note || "")}">NOT IN MASTER</span>` : ""}</td>
       <td class="n" data-l="Sheet qty">${m.sheet_qty}</td><td class="n" data-l="Invoice qty">${m.invoice_qty}</td>
       <td class="n" data-l="Diff">${signed(m.qty_diff, x => x)}</td><td class="n" data-l="Master kg/pc">${kgpc(m.master_kg)}</td>
       <td class="n" data-l="Effect (kg)">${signed(m.qty_kg, kgf)}</td>
       <td data-l="Group / note">${esc([m.group, m.note].filter(Boolean).join(" · "))}</td>
     </tr>`).join("");
   const nim = s.sheet_not_in_master;
-  $("nim").innerHTML = nim.length ? `<div class="nim">Loading sheet models <b>not in the master sheet</b> — weighed with the invoice kg/pc (rate ÷ Rate/Kg; a similar billed model's when not billed), so their unit price is not checked (listed in the Excel "Master sheet (loaded)" tab):
+  $("nim").innerHTML = nim.length ? `<div class="nim">Loading sheet models <b>not in the master sheet</b> — flagged and weighed at invoice rate ÷ Rate/Kg (a similar billed model's rate when not billed); their unit price cannot be checked (listed in the Excel "Master sheet (loaded)" tab):
     ${[...nim].sort((a, b) => byModel(a.model, b.model)).map(m => `<b>${esc(m.model)}</b> × ${m.sheet_qty}${m.master_kg == null ? " (no weight)" : ` @ ${kgpc(m.master_kg)}${m.kg_source && m.kg_source !== "invoice" ? ` from ${esc(m.kg_source.replace("invoice ", ""))}` : ""}`}`).join(" · ")}</div>` : "";
 }
 

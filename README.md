@@ -40,7 +40,8 @@ and produces an Excel reconciliation report.
      code's master kg/pc - no tolerance; differences shown in kg,
    - **Check 2, quantity**: (invoice nos - sheet nos) x master kg/pc per model,
    - plus billed kg of models with no weight at all.
-   A model **not in the master** is weighed with its invoice kg/pc (rate / Rate/Kg), so its loaded pcs still
+   A model **not in the master** is flagged NOT IN MASTER and weighed at invoice rate / Rate/Kg (not rounded; the
+   line with the most pcs when it has several rates), so its loaded pcs still
    count in the loaded kg (otherwise the variance swings by their whole weight). When it was not billed, the
    invoice kg/pc of its manual-match partner, or else the closest billed model (Pro only with Pro), is used.
    Its unit price cannot be checked, so Check 1 is 0 for it and its difference falls in Check 2.

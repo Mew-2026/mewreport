@@ -42,13 +42,13 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
     lines_by_model = defaultdict(list)
     for l in inv["lines"]:
         lines_by_model[l["model"]].append(l)
-    # invoice kg/pc per billed model (qty-weighted, each line's rate / Rate per kg to 2 dp)
+    # invoice kg/pc per billed model, for models not in the master: rate / Rate per kg (not rounded), from the
+    # line with the most pcs (the first such line on a tie)
     inv_kg = {}
     for mod, ls in lines_by_model.items():
         priced = [l for l in ls if l.get("rate")]
         if priced:
-            inv_kg[mod] = (sum(l["qty"] * round(l["rate"] / rate_per_kg, 2) for l in priced)
-                           / sum(l["qty"] for l in priced))
+            inv_kg[mod] = max(priced, key=lambda l: l["qty"])["rate"] / rate_per_kg
     group_models = defaultdict(list)   # manual match group -> invoice models in it
     for r in recon_rows:
         if r.get("group") and r["invoice_model"]:
@@ -101,8 +101,8 @@ def weight_recon(recon_rows, inv, master, rate_per_kg):
             gaps = [round(l["rate"] / rate_per_kg, 2) - round(k, 2) for l, k in priced if k]
             if source != "master":
                 m["price_status"] = "NOT IN MASTER"
-                m["note"] = (f"not in master - weighed at {kg:.2f} kg/pc from the "
-                             + ("invoice rate" if source == "invoice" else f"invoice rate of {source[8:]} (similar model)"))
+                m["note"] = (f"NOT IN MASTER - weighed at {kg:.2f} kg/pc = invoice rate / {rate_per_kg:g}"
+                             + ("" if source == "invoice" else f" of {source[8:]} (similar model, not billed itself)"))
                 not_in_master.append(m)
             elif not gaps:
                 m["price_status"] = "NOT BILLED"
@@ -193,9 +193,9 @@ def add_weight_sheets(wb, w, master):
     ws.append([])
     ws.append(["CHECK 2 - Quantity: loading sheet vs invoice, converted to kg with master kg/pc"])
     ws.cell(ws.max_row, 1).font = Font(bold=True, size=12)
-    table(["Model", "Status", "Sheet model", "Sheet line", "Sheet qty", "Invoice qty", "Diff (inv - sheet)", "Master kg/pc", "Effect (kg)", "Group"],
+    table(["Model", "Status", "Sheet model", "Sheet line", "Sheet qty", "Invoice qty", "Diff (inv - sheet)", "Master kg/pc", "Effect (kg)", "Group / note"],
           [[m["model"], m["qty_status"], m["sheet_model"], m["sheet_lines"], m["sheet_qty"], m["invoice_qty"], m["qty_diff"],
-            m["master_kg"], m["qty_kg"], m["group"]] for m in models],
+            m["master_kg"], m["qty_kg"], " · ".join(x for x in (m["group"], m.get("note", "")) if x)] for m in models],
           [None, None, None, None, "0", "0", "+0;-0;0", "0.00", kgf, None], status_col=1)
     for col, wd in zip("ABCDEFGHIJ", [44, 16, 14, 14, 14, 14, 16, 13, 14, 50]):
         ws.column_dimensions[col].width = wd
