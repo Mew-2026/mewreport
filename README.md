@@ -44,7 +44,8 @@ and produces an Excel reconciliation report.
    line with the most pcs when it has several rates), so its loaded pcs still
    count in the loaded kg (otherwise the variance swings by their whole weight). When it was not billed, the
    invoice kg/pc of its manual-match partner, or else the closest billed model (Pro only with Pro), is used.
-   Its unit price cannot be checked, so Check 1 is 0 for it and its difference falls in Check 2.
+   Its unit price cannot be checked: its quantity difference falls in Check 2; Check 1 keeps only rounding and
+   lines billed at a second rate.
    kg and rupee figures are whole numbers (kg/pc and Rs/kg keep 2 decimals); the quantity part absorbs
    any 1 kg rounding so the parts always add up. One model can have several item codes with different
    weights: each invoice line uses its own. Manual matches re-run the weight check automatically.
