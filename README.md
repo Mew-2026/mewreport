@@ -24,8 +24,11 @@ and produces an Excel reconciliation report.
    a *Manual matches* panel lists every group with *Ungroup* (and *Ungroup all*), a single row can be
    taken out of its group, and every change offers *Undo*. Nothing is re-read, so no credits are spent.
    The Excel report (and Step 2's combined report) lists the groups with their net difference and note.
-3. **Matching** pairs each sheet model with an invoice model by fuzzy match, ignoring version
-   tags (V21, R2, C…) and keeping Pro separate (`reconcile.py`).
+3. **Matching** is strict: a sheet model matches an invoice model only when it is the same battery after
+   correcting known reading slips (ILTO -> ILTJ, ILT1 -> ILTT, UCTI -> UCTT, 2042ST -> 2042STJ, a stray
+   L after LPTT12150H). Version tags (V21, R2, C...) are ignored; a trailing **P means Pro** and Pro is
+   never paired with non-Pro. Rows with the same model on the sheet are added up. Anything else stays
+   NOT IN INVOICE / NOT IN SHEET with a "possible match" hint, to be matched by hand (`reconcile.py`).
 
 4. **Rate check** (step 2): upload the mastersheet (*Item code*, *Material description*, *weight (kg)*;
    `.xlsx`/`.xlsm`/`.csv`, columns found by their contents even if shifted under the headers) and type
@@ -110,7 +113,7 @@ Every row is marked **CORRECT** (green) or **INCORRECT** (red), incorrect rows f
 | NOT IN INVOICE | model on the sheet but not billed |
 | NOT IN SHEET | billed but not on the sheet |
 
-Blue model cells mark fuzzy pairings below 90% — check those by eye. The *Loading sheet (OCR)*
+Blue model cells mark sheet text that was corrected to reach the model (e.g. ILTO18148 read as ILTJ18148). The *Loading sheet (OCR)*
 tab shows the raw renamed.to replies so a misread can be traced.
 
 ## Limits

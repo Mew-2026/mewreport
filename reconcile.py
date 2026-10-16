@@ -16,36 +16,30 @@ from rapidfuzz import fuzz
 
 from invoice_parser import combine_invoices, read_invoice
 
-MIN_SCORE = 75     # below this a sheet model is treated as "not on invoice"
-CHECK_SCORE = 90   # below this the pairing is flagged for a human to check
+SUGGEST_SCORE = 75   # unmatched rows show the closest unmatched model above this as "possible match"
 
 
 def normalize(model):
-    """Smooth over common handwriting/OCR slips before fuzzy matching."""
-    m = model.upper()
-    m = re.sub(r"^ILT[O0]", "ILTJ", m)   # ILTJ read as ILTO / ILT0
-    m = re.sub(r"^ILT[1I]", "ILTT", m)   # ILTT read as ILT1
+    """Sheet model -> the same key the invoice parser gives (invoice_parser.model_key).
+
+    Only known handwriting / reading slips are corrected; nothing is guessed:
+      ILTO / ILT0 -> ILTJ, ILT1 -> ILTT, UCTI -> UCTT, 4-digit Amaze ST -> STJ (J often lost),
+      LPTT12150HL -> LPTT12150H (stray L), and a trailing PRO -> P (P at the end means Pro).
+    """
+    m = re.sub(r"[^A-Z0-9]", "", str(model).upper())
+    m = re.sub(r"PRO$", "P", m)
+    m = re.sub(r"^ILT[O0]", "ILTJ", m)
+    m = re.sub(r"^ILT[1I]", "ILTT", m)
     m = re.sub(r"^UCT[I1]", "UCTT", m)
-    m = re.sub(r"(\d{4})ST$", r"\1STJ", m)  # 2042ST -> 2042STJ (J often lost)
-    m = re.sub(r"(\d{4})STP$", r"\1STJP", m)
-    m = re.sub(r"(12150H)L$", r"\1", m)     # LPTT12150HL: trailing L is a stray mark
+    m = re.sub(r"^(\d{4})ST(P?)$", r"\1STJ\2", m)   # only the 4-digit Amaze models (2042ST); RC18000ST stays
+    m = re.sub(r"^(LPTT121[25]0H)L(P?)$", r"\1\2", m)
     return m
 
 
-def match(sheet_rows, inv_models):
-    """Pair each sheet row with an invoice model, one-to-one, best scores first."""
-    pairs = sorted(
-        ((fuzz.ratio(normalize(r["model"]), k), i, k) for i, r in enumerate(sheet_rows) for k in inv_models),
-        reverse=True,
-    )
-    by_row, used = {}, set()
-    for score, i, k in pairs:
-        if score < MIN_SCORE:
-            break
-        if i not in by_row and k not in used:
-            by_row[i] = (k, score)
-            used.add(k)
-    return by_row
+def suggest(key, candidates):
+    """Closest model among the unmatched ones on the other side - shown as a hint, never applied."""
+    best = max(((fuzz.ratio(key, c), c) for c in candidates), default=(0, None))
+    return best[1] if best[0] >= SUGGEST_SCORE else ""
 
 
 def refs(lines, multi):
@@ -59,7 +53,12 @@ def refs(lines, multi):
 
 
 def reconcile(sheet, inv):
-    """inv: result of invoice_parser.combine_invoices (one or more invoices for the load)."""
+    """inv: result of invoice_parser.combine_invoices (one or more invoices for the load).
+
+    Strict matching: a sheet model and an invoice model are the same battery only when their keys are
+    equal after normalize(). Different numbers, a different family (RC / BC) or Pro vs non-Pro are never
+    paired automatically; such rows stay NOT IN INVOICE / NOT IN SHEET with a "possible match" hint, and
+    can be matched by hand on the page. Sheet rows with the same model are added up."""
     multi = len(inv["invoices"]) > 1
     agg = defaultdict(lambda: {"qty": 0, "lines": [], "codes": set(), "descs": set()})
     for l in inv["lines"]:
@@ -68,35 +67,41 @@ def reconcile(sheet, inv):
         a["lines"].append((l["invoice_no"], l["sr"]))
         a["codes"].add(l["code"])
         a["descs"].add(l["desc"])
-    by_row = match(sheet["rows"], list(agg))
 
-    def row(line, sheet_model, k, score, sq, check):
-        a = agg.get(k)
+    sheet_by_key = {}   # model key -> sheet rows with that model, in sheet order
+    for r in sheet["rows"]:
+        sheet_by_key.setdefault(normalize(r["model"]), []).append(r)
+    unmatched_inv = [k for k in agg if k not in sheet_by_key]
+    unmatched_sheet = [k for k in sheet_by_key if k not in agg]
+
+    def row(key, sheet_rows):
+        a = agg.get(key)
+        sq = sum(r["qty"] for r in sheet_rows)
         iq = a["qty"] if a else 0
-        if not sheet_model:
-            status = "NOT IN SHEET"
+        if not sheet_rows:
+            status, hint = "NOT IN SHEET", suggest(key, unmatched_sheet)
         elif not a:
-            status = "NOT IN INVOICE"
-        elif iq == sq:
-            status = "OK"
+            status, hint = "NOT IN INVOICE", suggest(key, unmatched_inv)
         else:
-            status = "QTY MISMATCH"
+            status, hint = ("OK" if iq == sq else "QTY MISMATCH"), ""
+        written = ", ".join(dict.fromkeys(r["model"] for r in sheet_rows))
         return {
-            "line": line, "sheet_model": sheet_model, "invoice_model": k or "", "score": score,
-            "sheet_qty": sq, "invoice_qty": iq, "diff": iq - sq, "status": status,
-            "result": "CORRECT" if status == "OK" else "INCORRECT", "check": check,
+            "line": sheet_rows[0]["line"] if sheet_rows else "",
+            "sheet_lines": ", ".join(str(r["line"]) for r in sheet_rows),
+            "sheet_model": written, "invoice_model": key if a else "", "model": key,
+            "score": 100 if (a and sheet_rows) else "", "sheet_qty": sq, "invoice_qty": iq, "diff": iq - sq,
+            "status": status, "result": "CORRECT" if status == "OK" else "INCORRECT",
+            # blue: the sheet text was corrected to reach this model (e.g. ILTO18148 read as ILTJ18148)
+            "check": bool(sheet_rows) and any(re.sub(r"[^A-Z0-9]", "", r["model"].upper()) != key for r in sheet_rows),
+            "suggest": hint,
             "invoices": ", ".join(dict.fromkeys(no for no, _ in a["lines"])) if a else "",
             "invoice_lines": refs(a["lines"], multi) if a else "",
             "item_codes": ", ".join(sorted(a["codes"])) if a else "",
             "description": " / ".join(sorted(a["descs"])) if a else "",
         }
 
-    out = []
-    for i, r in enumerate(sheet["rows"]):
-        k, score = by_row.get(i, (None, 0))
-        out.append(row(r["line"], r["model"], k, round(score), r["qty"], k is not None and score < CHECK_SCORE))
-    matched = {o["invoice_model"] for o in out}
-    out += [row("", "", k, "", 0, False) for k in agg if k not in matched]
+    out = [row(k, rows) for k, rows in sheet_by_key.items()]
+    out += [row(k, []) for k in agg if k not in sheet_by_key]
     return out
 
 
@@ -169,10 +174,11 @@ def write_report(path, rows, sheet, inv):
         ws.append([f"Skipped duplicate upload: {d}"])
     ws.append([])
 
-    cols = [("result", "Result"), ("status", "Reason"), ("line", "Sheet line"),
+    cols = [("result", "Result"), ("status", "Reason"), ("sheet_lines", "Sheet line"),
             ("sheet_model", "Sheet model (as read)"), ("invoice_model", "Invoice model"), ("score", "Match %"),
             ("sheet_qty", "Sheet qty"), ("invoice_qty", "Invoice qty"), ("diff", "Diff (inv - sheet)"),
-            ("group", "Group"), ("group_net", "Group net"), ("note", "Note"), ("invoices", "Invoice no"), ("invoice_lines", "Invoice Sr. Nos"), ("item_codes", "Item codes"),
+            ("group", "Group"), ("group_net", "Group net"), ("note", "Note"), ("suggest", "Possible match"),
+            ("invoices", "Invoice no"), ("invoice_lines", "Invoice Sr. Nos"), ("item_codes", "Item codes"),
             ("description", "Invoice description")]
     ws.append([h for _, h in cols])
     hdr = ws.max_row
@@ -196,7 +202,8 @@ def write_report(path, rows, sheet, inv):
     for c in ws[ws.max_row]:
         c.font = BOLD
     ws.append([])
-    ws.append([f"Blue model cells: fuzzy match below {CHECK_SCORE}% - check the sheet model was read and paired correctly."])
+    ws.append(["Models are matched only when they are the same battery (P at the end = Pro). Blue model cells: the sheet text "
+               "was corrected to reach the model (e.g. ILTO -> ILTJ). 'Possible match' is only a hint - match such rows by hand."])
     ws.append(["Compare 'Loading sheet pcs' with the total written on the paper: a misread row changes it."])
     groups = {}
     for r in rows:
@@ -213,9 +220,9 @@ def write_report(path, rows, sheet, inv):
             parts = ", ".join(f"{r['sheet_model'] or '-'} / {r['invoice_model'] or '-'} : {r['diff']:+d}" for r in rs)
             ws.append([g, rs[0]["result"], rs[0]["group_net"], parts, "", "", "", "", "", rs[0].get("note", "")])
             ws.cell(ws.max_row, 2).font = RESULT_FONT[rs[0]["result"]]
-    ws.auto_filter.ref = f"A{hdr}:P{last}"
+    ws.auto_filter.ref = f"A{hdr}:Q{last}"
     ws.freeze_panes = ws.cell(row=hdr + 1, column=1)
-    for col, w in zip("ABCDEFGHIJKLMNOP", [16, 16, 10, 22, 16, 9, 10, 11, 15, 8, 10, 30, 15, 22, 34, 60]):
+    for col, w in zip("ABCDEFGHIJKLMNOPQ", [16, 16, 10, 22, 16, 9, 10, 11, 15, 8, 10, 30, 16, 15, 22, 34, 60]):
         ws.column_dimensions[col].width = w
 
     il = wb.create_sheet("Invoice lines")

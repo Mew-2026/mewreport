@@ -295,6 +295,8 @@
   body.selecting .toast { bottom: 110px; }
   .toast button { height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--sky); color: #0b2545; font: 700 13px Inter, system-ui, sans-serif; cursor: pointer; }
   .gnet { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .hint { display: block; margin-top: 3px; font-size: 11.5px; color: var(--man); text-transform: none; }
+  .hint b { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
   .gnote { display: block; font-size: 11.5px; color: var(--muted); font-style: italic; margin-top: 3px; }
   .reason { font-size: 12.5px; color: var(--muted); text-transform: capitalize; }
   tr.check td.m { background: var(--check-bg); }
@@ -545,7 +547,7 @@
       <thead><tr><th title="Tick incorrect rows to match them by hand">✓</th><th>Result</th><th>Line</th><th>Sheet model</th><th>Invoice model</th><th class="n">Sheet</th><th class="n">Invoice</th><th class="n">Diff</th><th>Reason</th><th>Invoice Sr.</th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
-    <p class="note"><i></i>Blue model cells: fuzzy pairing below 90% — check by eye. Tick incorrect rows (anywhere in the list) to match them by hand: net 0 → MATCHED, otherwise PARTLY MATCHED with the difference left.</p>
+    <p class="note"><i></i>Models match only when they are the same battery (P at the end = Pro). Blue model cells: sheet text corrected to reach the model (e.g. ILTO → ILTJ). "Possible match" is a hint only. Tick incorrect rows (anywhere in the list) to match them by hand: net 0 → MATCHED, otherwise PARTLY MATCHED with the difference left.</p>
   </section>
 
   <section id="result2" class="result">
@@ -1046,17 +1048,17 @@ function render(animate = true) {
   $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(false); });
   const needle = q.toLowerCase();
   const rows = d.rows.map((r, i) => ({ r, i })).filter(({ r }) => filter === "ALL" || r.result === filter)
-    .filter(({ r }) => !needle || [r.sheet_model, r.invoice_model, r.line, r.invoice_lines, r.status, r.group, r.note].join(" ").toLowerCase().includes(needle))
+    .filter(({ r }) => !needle || [r.sheet_model, r.invoice_model, r.sheet_lines, r.invoice_lines, r.status, r.group, r.note, r.suggest].join(" ").toLowerCase().includes(needle))
     .sort((a, b) => ORDER[a.r.result] - ORDER[b.r.result] || String(a.r.group || "").localeCompare(String(b.r.group || ""), undefined, { numeric: true }));
   $("rows").innerHTML = rows.length ? rows.map(({ r, i }, n) => `
     <tr class="${r.check ? "check " : ""}${ROWCLS[r.result]}${picked.has(i) ? " sel" : ""}" style="animation-delay:${animate ? Math.min(n, 30) * 18 : 0}ms">
       <td class="pick" data-l="Pick">${r.result === "INCORRECT" ? `<input type="checkbox" data-i="${i}" ${picked.has(i) ? "checked" : ""} aria-label="Pick row ${esc(r.sheet_model || r.invoice_model)} for a manual match">` : ""}</td>
       <td data-l="Result"><span class="pill ${PILL[r.result]}">${r.result}</span>${r.group ? `<span class="grp">${esc(r.group)}<button type="button" class="txt" data-g="${esc(r.group)}" title="Ungroup ${esc(r.group)}: all its rows go back to incorrect">Ungroup</button></span><button type="button" class="rm" data-rm="${i}" title="Take only this row out of ${esc(r.group)}">Remove row</button>` : ""}${r.note ? `<span class="gnote">${esc(r.note)}</span>` : ""}</td>
-      <td data-l="Line">${esc(r.line)}</td>
+      <td data-l="Line">${esc(r.sheet_lines ?? r.line)}</td>
       <td class="m mono" data-l="Sheet model">${esc(r.sheet_model)}</td><td class="m mono" data-l="Invoice model">${esc(r.invoice_model)}</td>
       <td class="n" data-l="Sheet">${r.sheet_qty}</td><td class="n" data-l="Invoice">${r.invoice_qty}</td>
       <td class="n" data-l="Diff">${signed(r.diff, v => v)}${r.group ? `<span class="gnet">group net ${r.group_net > 0 ? "+" : ""}${r.group_net}</span>` : ""}</td>
-      <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}</td><td data-l="Invoice Sr.">${esc(r.invoice_lines)}</td>
+      <td class="reason" data-l="Reason">${esc(r.status.toLowerCase())}${r.suggest && !r.group ? `<span class="hint">possible match: <b>${esc(r.suggest)}</b></span>` : ""}</td><td data-l="Invoice Sr.">${esc(r.invoice_lines)}</td>
     </tr>`).join("") : `<tr><td class="empty" colspan="10">No rows match.</td></tr>`;
   $("result").classList.add("show");
   selbar();
