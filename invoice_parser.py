@@ -37,11 +37,15 @@ def model_key(desc):
         r"(ILT[TJ]\d{5})",
         r"BOOSTCHARGE(BC\d{5}(?:ST)?)",
         r"((?:PC|RC|EC|SC|LM|TC|TZ|NEO)\d{5}(?:STJ|TJ|ST|TT)?)",
-        r"(?<!\d)([2-5]\d{3}(?:STJ|TT))",
+        # solar / other families: LPTT12135H, LPTT12150L, ASTT12150L, LPT1240H, UCTT25066, AP20048TT, AB18060 ...
+        r"((?:LPTT|ASTT|LPT|UCTT|BC|AP|AB)\d{4,5}(?:STJ|TJ|ST|TT|H|L)?)",
+        r"(?<!\d)([2-5]\d{3}(?:STJ|TT|ST))",
+        r"(ECOCHRG\d{5})",
     ]:
         m = re.search(pat, s)
         if m:
-            return m.group(1) + ("P" if pro else "")
+            key = re.sub(r"^(\d{4})ST$", r"\1STJ", m.group(1))   # 4-digit Amaze ST = STJ, as on the sheet (reconcile.normalize)
+            return key + ("P" if pro else "")
     return s
 
 

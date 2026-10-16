@@ -55,11 +55,14 @@ and produces an Excel reconciliation report.
    sheet models not in the master listed below); the PDF opens with the weight answer
    (`rate_check.py`, `mastersheet.py`, `step1_report.py`).
 
-**Report for company (PDF)**: one A4 report to send to the company - loaded vs invoiced kg (and Rs at
-today's Rate/Kg), the difference split into **A. quantity** (pieces invoiced vs loaded, per model) and
-**B. unit price** (each invoice line's rate / Rate/Kg vs the standard kg/pc of its item code; an item code
-missing from the master is compared with the same model's closest master row), how it is calculated, the
-models not in the master, and a model-wise annexure. The combined PDF opens with the same report.
+**Company report (PDF and Excel)**: what is sent to the company - the load details (invoices, recipient,
+Rate/Kg), loaded vs invoiced in pieces, kg and Rs with the difference, and the model-wise annexure (loaded
+and invoiced pcs, kg/pc, loaded kg, invoiced kg, difference, remark). The combined PDF opens with it.
+
+Models are read from descriptions by family (PC, RC, EC, SC, LM, TC, TZ, BC, NEO, ILTT/ILTJ, LPTT, ASTT, LPT,
+UCTT, AP, AB, 4-digit Amaze TT/STJ ...), so solar models such as LPTT12150L, LPTT12135H or LPT1240H find
+their master weight and match the sheet. A model not in the master and not billed borrows the invoice rate
+of a billed model with the same number (Pro with Pro first: TZ15060STJ -> TC15060, RC26000 -> RC26000P).
 
 Every table on the page - the loading sheet, Loading sheet vs invoices, Check 1 (unit price, line by
 line) and Check 2 (quantity in kg) - has **Excel** and **PDF** buttons. They export exactly what the

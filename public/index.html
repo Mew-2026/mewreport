@@ -594,7 +594,7 @@
   <section id="result2" class="result" role="tabpanel">
     <div class="result-h">
       <div><h2>Weight &amp; rate check</h2><div class="meta" id="title2"></div><div id="verdict2"></div></div>
-      <div class="dl"><a class="btn sm" id="dlr2" download hidden>⬇ Report for company (PDF)</a><a class="btn sm ghost" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
+      <div class="dl"><a class="btn sm" id="dlr2" download hidden>⬇ Company report (PDF)</a><a class="btn sm" id="dlr2x" download hidden>⬇ Company report (Excel)</a><a class="btn sm ghost" id="dlx2" download>⬇ Combined Excel</a><a class="btn sm ghost" id="dlp2" download>⬇ Combined PDF</a></div>
     </div>
     <div id="warn2"></div>
     <div id="wbox" hidden>
@@ -1224,6 +1224,8 @@ async function runWeight() {
   blobLink("dlx2", rc.xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename + ".xlsx");
   blobLink("dlp2", rc.pdf, "application/pdf", rc.filename + ".pdf");
   $("dlr2").hidden = !rc.report_pdf;
+  $("dlr2x").hidden = !rc.report_xlsx;
+  if (rc.report_xlsx) blobLink("dlr2x", rc.report_xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", rc.filename.replace(/^report/, "weight_report") + ".xlsx");
   if (rc.report_pdf) blobLink("dlr2", rc.report_pdf, "application/pdf", rc.filename.replace(/^report/, "weight_report") + ".pdf");
   render2();
   syncTabs();

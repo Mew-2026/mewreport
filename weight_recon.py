@@ -14,6 +14,7 @@ model (same Pro / non-Pro) is used. Its unit price cannot be checked, so Check 1
 Works on the Step 1 rows (reconcile.reconcile, one row per model) and the parsed invoice lines, so
 nothing is read again.
 """
+import re
 from collections import Counter, defaultdict
 
 from rapidfuzz import fuzz
@@ -29,8 +30,15 @@ def _model_kgs(master, model):
 
 
 def _similar(key, candidates):
-    """Closest billed model to weigh an unbilled model that is not in the master; Pro only with Pro."""
+    """Billed model to weigh an unbilled model that is not in the master: one with the same model number
+    (Pro with Pro preferred: RC18000P -> RC18000STP, RC26000 -> RC26000P, TZ15060STJ -> TC15060), else the
+    closest name (Pro only with Pro)."""
     pro = key.endswith("P")
+    num = re.search(r"\d{4,5}", key)
+    same = [c for c in candidates if c != key and num and re.search(r"\d{4,5}", c)
+            and re.search(r"\d{4,5}", c).group() == num.group()]
+    if same:
+        return max(same, key=lambda c: (c.endswith("P") == pro, fuzz.ratio(key, c)))
     best = max(((fuzz.ratio(key, c), c) for c in candidates if c != key and c.endswith("P") == pro), default=(0, None))
     return best[1] if best[0] >= SUGGEST_SCORE else None
 
@@ -278,140 +286,154 @@ def _rs(kg, rate):
     return None if kg is None else kg * rate
 
 
-def company_story(w, invoices, ss, colors, mm, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak):
-    """The weight gap report for the company: loaded vs invoiced kg, split into quantity and unit price,
-    with the rows behind each part. invoices: [{"invoice_no", "date", "recipient"}]."""
+def _annex_rows(w):
+    """Model-wise weight rows for the company report: (model, loaded pcs, invoiced pcs, kg/pc, loaded kg,
+    invoiced kg, difference kg, remark)."""
+    out = []
+    for m in sorted(w["models"], key=lambda m: model_sort_key(m["model"])):
+        diff = None if m["loaded_kg"] is None else m["billed_kg"] - m["loaded_kg"]
+        remark = [x for x in (
+            m["qty_status"].lower() if m["qty_status"] not in ("OK", "NOT IN MASTER") else "",
+            m["price_status"].lower() if m["price_status"] in ("PRICE HIGH", "PRICE LOW") else "",
+            ("not in master, no weight" if m["master_kg"] is None else "not in master")
+            if m["kg_source"] != "master" else "") if x]
+        out.append((m["model"], m["sheet_qty"], m["invoice_qty"], m["master_kg"], m["loaded_kg"], m["billed_kg"],
+                    diff, ", ".join(remark)))
+    return out
+
+
+def _report_info(w, invoices):
+    s, rate = w["summary"], w["summary"]["rate_per_kg"]
+    inv_txt = ", ".join(f"{i.get('invoice_no') or '?'}" + (f" dated {i['date']}" if i.get("date") else "") for i in invoices)
+    recipient = next((i.get("recipient") for i in invoices if i.get("recipient")), "")
+    line = (f"Loading sheet vs tax invoice{'s' if len(invoices) > 1 else ''} {inv_txt}"
+            + (f" · {recipient}" if recipient else "") + f" · Rate Rs {rate:,.2f} per kg")
+    var = s["variance_kg"]
+    pcs = s["billed_pcs"] - s["loaded_pcs"]
+    head = [["", "Pieces", "Weight (kg)", "Value (Rs)"],
+            ["Loaded, as per loading sheet", s["loaded_pcs"], s["loaded_kg"], s["loaded_kg"] * rate],
+            ["Invoiced", s["billed_pcs"], s["billed_kg"], s["billed_kg"] * rate],
+            ["Difference (invoiced - loaded)", pcs, var, var * rate]]
+    verdict = (f"The invoice bills {abs(var):,.0f} kg (Rs {abs(var) * rate:,.0f}) {'MORE' if var > 0 else 'LESS'} "
+               "than the weight loaded." if var else "The invoiced weight equals the weight loaded.")
+    return line, head, verdict
+
+
+def company_story(w, invoices, ss, colors, mm, Paragraph, Spacer, Table, TableStyle, KeepTogether=None, PageBreak=None):
+    """The weight report for the company: load details, loaded vs invoiced (pcs, kg, Rs) and the model-wise
+    annexure. invoices: [{"invoice_no", "date", "recipient"}]."""
     from reportlab.lib.styles import ParagraphStyle
 
-    s, rate = w["summary"], w["summary"]["rate_per_kg"]
+    s = w["summary"]
     body = ParagraphStyle("body", parent=ss["Normal"], fontSize=9, leading=12)
-    small = ParagraphStyle("small8", parent=ss["Normal"], fontSize=7.5, leading=9.5)
-    big = ParagraphStyle("big", parent=ss["Normal"], fontSize=13, leading=17, spaceBefore=2, spaceAfter=2)
+    big = ParagraphStyle("big", parent=ss["Normal"], fontSize=13, leading=17, spaceBefore=4, spaceAfter=2)
     h2 = ParagraphStyle("h2", parent=ss["Heading2"], fontSize=12, spaceBefore=8, spaceAfter=4)
     kg = lambda v: "" if v is None else f"{v:,.0f}"
     skg = lambda v: "" if v is None else ("+" if round(v) > 0 else "") + f"{v:,.0f}"
-    rs = lambda v: "" if v is None else ("+" if round(v) > 0 else "") + f"{v:,.0f}"
     k2 = lambda v: "" if v is None else f"{v:,.2f}"
     head_bg, grid = colors.HexColor("#E7E9EE"), colors.HexColor("#9AA1AD")
     red, green, amber = colors.HexColor("#FFC7CE"), colors.HexColor("#C6EFCE"), colors.HexColor("#FFF2CC")
 
-    def table(data, widths, num_from=1, total=True, extra=()):
+    def table(data, widths, extra=()):
         t = Table(data, repeatRows=1, colWidths=[x * mm for x in widths], hAlign="LEFT")
-        st = [("FONTSIZE", (0, 0), (-1, -1), 8), ("GRID", (0, 0), (-1, -1), 0.3, grid),
-              ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("BACKGROUND", (0, 0), (-1, 0), head_bg),
-              ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (num_from, 1), (-1, -1), "RIGHT")]
-        if total:
-            st += [("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("BACKGROUND", (0, -1), (-1, -1), head_bg)]
-        t.setStyle(TableStyle(st + list(extra)))
+        t.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8), ("GRID", (0, 0), (-1, -1), 0.3, grid),
+                               ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("BACKGROUND", (0, 0), (-1, 0), head_bg),
+                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+                               ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                               ("BACKGROUND", (0, -1), (-1, -1), head_bg)] + list(extra)))
         return t
 
+    line, head, verdict = _report_info(w, invoices)
     var = s["variance_kg"]
-    word = "MORE" if var > 0 else "LESS"
-    inv_txt = ", ".join(f"{i.get('invoice_no') or '?'}" + (f" dated {i['date']}" if i.get("date") else "") for i in invoices)
-    recipient = next((i.get("recipient") for i in invoices if i.get("recipient")), "")
-    story = [Paragraph("Weight Reconciliation Report", ss["Title"]),
-             Paragraph(f"Loading sheet vs tax invoice{'s' if len(invoices) > 1 else ''} {inv_txt}"
-                       + (f" &middot; {recipient}" if recipient else "")
-                       + f" &middot; Rate Rs {rate:,.2f} per kg", body), Spacer(0, 4 * mm)]
+    story = [Paragraph("Weight Reconciliation Report", ss["Title"]), Paragraph(line.replace("·", "&middot;"), body),
+             Spacer(0, 4 * mm)]
+    data = [head[0]] + [[r[0], f"{r[1]:+d}" if n == 3 and r[1] else r[1], skg(r[2]) if n == 3 else kg(r[2]),
+                         skg(r[3]) if n == 3 else kg(r[3])] for n, r in enumerate(head[1:], 1)]
+    story += [table(data, [70, 25, 35, 35], extra=[("BACKGROUND", (2, -1), (3, -1), red if var else green),
+                                                   ("FONTSIZE", (0, 0), (-1, -1), 9.5)]),
+              Spacer(0, 3 * mm), Paragraph(f"<b>{verdict}</b>", big)]
 
-    # 1. the answer
-    head = [["", "Pieces", "Weight (kg)", "Value (Rs)"],
-            ["Loaded, as per loading sheet", s["loaded_pcs"], kg(s["loaded_kg"]), kg(_rs(s["loaded_kg"], rate))],
-            ["Invoiced", s["billed_pcs"], kg(s["billed_kg"]), kg(_rs(s["billed_kg"], rate))],
-            ["Difference (invoiced - loaded)", f"{s['billed_pcs'] - s['loaded_pcs']:+d}" if s["billed_pcs"] != s["loaded_pcs"] else "0",
-             skg(var), rs(_rs(var, rate))]]
-    story += [table(head, [70, 25, 35, 35], extra=[("BACKGROUND", (2, -1), (3, -1), red if var else green),
-                                                     ("FONTSIZE", (0, 0), (-1, -1), 9.5)]), Spacer(0, 3 * mm)]
-    story.append(Paragraph(
-        f"<b>The invoice bills {abs(var):,.0f} kg (Rs {abs(var) * rate:,.0f}) {word} than the weight loaded.</b>"
-        if var else "<b>The invoiced weight equals the weight loaded.</b>", big))
-
-    # 2. why
-    parts = [["Where the difference comes from", "kg", "Rs"],
-             ["A. Quantity - pieces invoiced differ from pieces loaded", skg(s["qty_kg"]), rs(_rs(s["qty_kg"], rate))],
-             ["B. Unit price - invoice rate / Rate per kg differs from the standard kg per piece", skg(s["price_kg"]),
-              rs(_rs(s["price_kg"], rate))]]
-    if s["not_in_master_kg"]:
-        parts.append(["C. Invoiced models with no standard weight", skg(s["not_in_master_kg"]),
-                      rs(_rs(s["not_in_master_kg"], rate))])
-    parts.append(["Total difference", skg(var), rs(_rs(var, rate))])
-    story += [Spacer(0, 2 * mm), table(parts, [125, 25, 30])]
-
-    models = sorted(w["models"], key=lambda m: model_sort_key(m["model"]))
-
-    # A. quantity
-    qrows = [m for m in models if m["qty_diff"] and m["master_kg"] is not None]
-    story.append(Paragraph(f"A. Quantity difference: {skg(s['qty_kg'])} kg", h2))
-    story.append(Paragraph("Pieces on the invoice minus pieces on the loading sheet, per model, at the model's "
-                           "standard weight per piece.", body))
-    data = [["Model", "Loaded pcs", "Invoiced pcs", "Difference pcs", "kg / pc", "Difference kg", "Difference Rs"]]
-    style = []
-    for n, m in enumerate(qrows, 1):
-        data.append([m["model"] + (" *" if m["kg_source"] != "master" else ""), m["sheet_qty"], m["invoice_qty"],
-                     f"{m['qty_diff']:+d}", k2(m["master_kg"]), skg(m["qty_kg"]), rs(_rs(m["qty_kg"], rate))])
-        style.append(("TEXTCOLOR", (3, n), (6, n), colors.HexColor("#9C0006" if m["qty_diff"] > 0 else "#1F4E79")))
-    data.append(["Total", sum(m["sheet_qty"] for m in qrows), sum(m["invoice_qty"] for m in qrows),
-                 f"{sum(m['qty_diff'] for m in qrows):+d}".replace("+0", "0"), "", skg(s["qty_kg"]), rs(_rs(s["qty_kg"], rate))])
-    story += [Spacer(0, 2 * mm), table(data, [40, 22, 24, 26, 20, 26, 28], extra=style)]
-
-    # B. unit price, line by line
-    lines = [d for m in models for d in m["lines"] if d["gap"] not in (None, 0.0)]
-    story.append(Paragraph(f"B. Unit price difference: {skg(s['price_kg'])} kg", h2))
-    story.append(Paragraph(f"Each invoice line's rate / Rs {rate:,.2f} gives the kg per piece it bills; this is "
-                           "compared with the standard kg per piece of that item in the master sheet.", body))
-    if lines:
-        data = [["Invoice / Sr", "Item code", "Model", "Pcs", "Rate (Rs)", "Billed kg/pc", "Std kg/pc",
-                 "Diff kg/pc", "Diff kg", "Diff Rs"]]
-        k1 = lambda v: f"{v:+,.1f}"
-        for d in lines:
-            data.append([f"{d['invoice_no']} / {d['sr']}", d["code"], d["model"], d["qty"], f"{d['rate']:,.2f}",
-                         k2(d["invoice_kg"]), k2(d["ref_kg"]) + ("" if d["ref_how"] == "item code" else " +"),
-                         f"{d['gap']:+.2f}", k1(d["effect_kg"]), rs(_rs(d["effect_kg"], rate))])
-        listed = sum(d["effect_kg"] for d in lines)
-        if abs(s["price_kg"] - listed) >= 0.5:
-            data.append(["Rounding of kg/pc to 2 decimals", "", "", "", "", "", "", "",
-                         k1(s["price_kg"] - listed), rs(_rs(s["price_kg"] - listed, rate))])
-        data.append(["Total", "", "", sum(d["qty"] for d in lines), "", "", "", "", skg(s["price_kg"]),
-                     rs(_rs(s["price_kg"], rate))])
-        story += [Spacer(0, 2 * mm), table(data, [28, 25, 22, 9, 17, 17, 20, 16, 14, 18], num_from=3)]
-    else:
-        story.append(Paragraph("Every invoice line is billed at the standard kg per piece.", body))
-
-    # notes
-    notes = ["Loaded weight = pieces on the loading sheet x standard kg per piece of the model (master sheet).",
-             f"Invoiced weight = invoice rate / Rs {rate:,.2f} per kg (kg per piece, 2 decimals) x invoiced pieces.",
-             "Difference = A (quantity) + B (unit price): the two parts always add up to the total difference."]
-    via = sorted({(d["code"], d["ref_code"]) for m in models for d in m["lines"]
-                  if d["ref_how"].startswith("same model") and d["ref_code"]})
-    if via:
-        notes.append("+ Item codes not in the master sheet, compared with the same model's standard weight: "
-                     + ", ".join(f"{a} (as {b})" for a, b in via) + ".")
-    nim = [m for m in models if m["kg_source"] not in ("master",) and m["master_kg"] is not None]
-    if nim:
-        notes.append("* Models NOT IN THE MASTER SHEET, weighed at invoice rate / Rate per kg: "
-                     + ", ".join(f"{m['model']} {m['master_kg']:.2f} kg"
-                                 + (f" (rate of {m['kg_source'][8:]})" if m["kg_source"] != "invoice" else "")
-                                 for m in nim) + ". Please confirm their standard weights.")
-    story += [Spacer(0, 3 * mm), Paragraph("<b>How this is calculated</b>", body)]
-    story += [Paragraph("&bull; " + n, small) for n in notes]
-
-    # annex: every model
-    story += [PageBreak(), Paragraph("Annexure: model-wise weight", h2)]
+    story.append(Paragraph("Annexure: model-wise weight", h2))
     data = [["Model", "Loaded pcs", "Invoiced pcs", "kg / pc", "Loaded kg", "Invoiced kg", "Difference kg", "Remark"]]
     style = []
-    for n, m in enumerate(models, 1):
-        diff = None if m["loaded_kg"] is None else m["billed_kg"] - m["loaded_kg"]
-        remark = [x for x in (m["qty_status"].lower() if m["qty_status"] not in ("OK", "NOT IN MASTER") else "",
-                              m["price_status"].lower() if m["price_status"] in ("PRICE HIGH", "PRICE LOW") else "",
-                              "not in master" if m["kg_source"] != "master" else "") if x]
-        data.append([m["model"], m["sheet_qty"], m["invoice_qty"], k2(m["master_kg"]), kg(m["loaded_kg"]),
-                     kg(m["billed_kg"]), skg(diff), ", ".join(remark)])
-        if remark:
-            style.append(("BACKGROUND", (7, n), (7, n), amber if remark == ["not in master"] else red))
+    for n, r in enumerate(_annex_rows(w), 1):
+        data.append([r[0], r[1], r[2], k2(r[3]), kg(r[4]), kg(r[5]), skg(r[6]), r[7]])
+        if r[7]:
+            style.append(("BACKGROUND", (7, n), (7, n), amber if r[7].startswith("not in master") else red))
     data.append(["Total", s["loaded_pcs"], s["billed_pcs"], "", kg(s["loaded_kg"]), kg(s["billed_kg"]), skg(var), ""])
-    story += [table(data, [27, 17, 19, 15, 19, 19, 21, 49], extra=style + [("ALIGN", (7, 1), (7, -1), "LEFT"),
-                                                                         ("FONTSIZE", (7, 1), (7, -1), 7)])]
+    story.append(table(data, [27, 18, 21, 15, 19, 19, 21, 46],
+                       extra=style + [("ALIGN", (7, 1), (7, -1), "LEFT"), ("FONTSIZE", (7, 1), (7, -1), 7)]))
     return story
+
+
+def write_company_xlsx(path, w, invoices):
+    """The company report as Excel: same info block and model-wise annexure as the PDF."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    s = w["summary"]
+    line, head, verdict = _report_info(w, invoices)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Weight report"
+    bold = Font(bold=True)
+    thin = Side(style="thin", color="9AA1AD")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    hdr = PatternFill("solid", fgColor="E7E9EE")
+    red, green, amber = (PatternFill("solid", fgColor=c) for c in ("FFC7CE", "C6EFCE", "FFF2CC"))
+    kgf, signed = "#,##0", "+#,##0;-#,##0;0"
+
+    ws.append(["Weight Reconciliation Report"])
+    ws["A1"].font = Font(bold=True, size=16)
+    ws.append([line])
+    ws.append([])
+
+    def row(values, fmts=(), fill_cols=(), fill=None, header=False):
+        ws.append(values)
+        r = ws.max_row
+        for c, v in enumerate(values, 1):
+            cell = ws.cell(r, c)
+            cell.border = box
+            if header:
+                cell.font, cell.fill = bold, hdr
+            if c - 1 < len(fmts) and fmts[c - 1]:
+                cell.number_format = fmts[c - 1]
+        for c in fill_cols:
+            ws.cell(r, c).fill = fill
+        return r
+
+    row(head[0], header=True)
+    row(head[1], (None, "0", kgf, kgf))
+    row(head[2], (None, "0", kgf, kgf))
+    r = row([head[3][0], head[3][1], round(head[3][2]), round(head[3][3])], (None, "+0;-0;0", signed, signed),
+            fill_cols=(3, 4), fill=red if s["variance_kg"] else green)
+    for c in range(1, 5):
+        ws.cell(r, c).font = bold
+    ws.append([])
+    ws.append([verdict])
+    ws.cell(ws.max_row, 1).font = Font(bold=True, size=13)
+    ws.append([])
+    ws.append(["Annexure: model-wise weight"])
+    ws.cell(ws.max_row, 1).font = Font(bold=True, size=12)
+    row(["Model", "Loaded pcs", "Invoiced pcs", "kg / pc", "Loaded kg", "Invoiced kg", "Difference kg", "Remark"],
+        header=True)
+    first = ws.max_row + 1
+    fmts = (None, "0", "0", "0.00", kgf, kgf, signed, None)
+    for a in _annex_rows(w):
+        r = row([a[0], a[1], a[2], None if a[3] is None else round(a[3], 2),
+                 None if a[4] is None else round(a[4]), round(a[5]), None if a[6] is None else round(a[6]), a[7]], fmts)
+        if a[7]:
+            ws.cell(r, 8).fill = amber if a[7].startswith("not in master") else red
+    r = row(["Total", s["loaded_pcs"], s["billed_pcs"], None, s["loaded_kg"], s["billed_kg"], s["variance_kg"], None],
+            fmts)
+    for c in range(1, 9):
+        ws.cell(r, c).font, ws.cell(r, c).fill = bold, hdr
+    for col, wd in zip("ABCDEFGH", [34, 12, 13, 10, 12, 12, 14, 40]):
+        ws.column_dimensions[col].width = wd
+    ws.freeze_panes = ws.cell(first, 1)
+    for rr in ws.iter_rows(min_row=first, max_row=ws.max_row):
+        rr[0].alignment = Alignment(horizontal="left")
+    wb.save(path)
 
 
 def write_company_pdf(path, w, invoices):

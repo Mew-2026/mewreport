@@ -23,7 +23,7 @@ from rate_check import ordered, run_on_step1, write_excel, write_pdf  # noqa: E4
 from rate_check import run as rate_run  # noqa: E402
 from rate_check import report_name as rate_report_name  # noqa: E402
 from reconcile import apply_groups, reconcile, report_name, write_report  # noqa: E402
-from weight_recon import weight_recon, write_company_pdf  # noqa: E402
+from weight_recon import weight_recon, write_company_pdf, write_company_xlsx  # noqa: E402
 
 app = Flask(__name__, static_folder=os.path.join(ROOT, "public"), static_url_path="")  # local runs; Vercel serves public/ itself
 
@@ -203,9 +203,10 @@ def rate_check():
         xlsx, pdf = io.BytesIO(), io.BytesIO()
         write_excel(xlsx, rows, s, m, wb, weight)
         write_pdf(pdf, rows, s, recon, weight)
-        report = io.BytesIO()
+        report, report_x = io.BytesIO(), io.BytesIO()
         if weight:
             write_company_pdf(report, weight, s["invoices"])
+            write_company_xlsx(report_x, weight, s["invoices"])
     except ValueError as e:
         return jsonify(error=str(e)), 422
     except Exception as e:
@@ -214,7 +215,8 @@ def rate_check():
                    combined=weight is not None, filename=name,
                    weight=_json_weight(weight) if weight else None,
                    xlsx=base64.b64encode(xlsx.getvalue()).decode(), pdf=base64.b64encode(pdf.getvalue()).decode(),
-                   report_pdf=base64.b64encode(report.getvalue()).decode() if weight else None)
+                   report_pdf=base64.b64encode(report.getvalue()).decode() if weight else None,
+                   report_xlsx=base64.b64encode(report_x.getvalue()).decode() if weight else None)
 
 
 def _json_weight(w):
