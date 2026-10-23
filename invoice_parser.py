@@ -201,7 +201,8 @@ def read_invoice(path):
         if label:
             top = label[0]["bottom"]
             left = header.crop((0, top + 0.5, label[0]["x1"] + 120, min(top + 14, header.height)))
-            recipient = (left.extract_text() or "").split("\n")[0].strip() or None
+            # tighter x_tolerance keeps the spaces in PDFs that place words close together ("MAHESH ENGINEERING WORKS")
+            recipient = (left.extract_text(x_tolerance=1.5) or "").split("\n")[0].strip() or None
 
     items = []
     for sr in sorted(lines):
