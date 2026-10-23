@@ -10,6 +10,7 @@ copy is read.
 
 Usage: python invoice_parser.py <invoice.pdf>
 """
+import os
 import re
 import sys
 
@@ -180,7 +181,7 @@ def read_invoice(path):
         last = None
         for i, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
-            m = re.search(r"Page No\.:\s*(\d+)\s*of\s*(\d+)", text)
+            m = re.search(r"Page\s*No\.:\s*(\d+)\s*of\s*(\d+)", text)   # some PDFs drop the spaces: "PageNo.: 1of5"
             if i and m and m.group(1) == "1":
                 break  # second copy starts
             texts.append(text)
@@ -196,7 +197,7 @@ def read_invoice(path):
 
         header = pdf.pages[0]
         recipient = None
-        label = header.search(r"Name, Address & GSTIN No of Recipient:")
+        label = header.search(r"Name,\s*Address\s*&\s*GSTIN\s*No\s*of\s*Recipient:", regex=True)
         if label:
             top = label[0]["bottom"]
             left = header.crop((0, top + 0.5, label[0]["x1"] + 120, min(top + 14, header.height)))
@@ -210,8 +211,8 @@ def read_invoice(path):
         items.append(dict(l, desc=" ".join(l["desc"].split()), model=model_key(l["desc"])))
     all_text = "\n".join(texts)
     return {
-        "invoice_no": _find(r"Inv\. No\.:\s*(\d+)", all_text),
-        "date": _find(r"Issue Date:\s*([\d.]+)", all_text),
+        "invoice_no": _find(r"Inv\.\s*No\.:\s*(\d+)", all_text),
+        "date": _find(r"Issue\s*Date:\s*([\d.]+)", all_text),
         "recipient": recipient,
         "lines": items,
         "printed_total_qty": total,
@@ -223,7 +224,9 @@ def combine_invoices(invoices, names=None):
     names = names or [None] * len(invoices)
     seen, kept, skipped = set(), [], []
     for inv, name in zip(invoices, names):
-        key = inv["invoice_no"] or name
+        if not inv.get("invoice_no"):   # number not found on the PDF: use the file name, so nothing downstream gets None
+            inv = dict(inv, invoice_no=os.path.splitext(os.path.basename(name or ""))[0] or f"invoice {len(kept) + 1}")
+        key = inv["invoice_no"]
         if key in seen:
             skipped.append(name or key)
             continue
