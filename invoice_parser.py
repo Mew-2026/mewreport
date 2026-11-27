@@ -35,18 +35,20 @@ def model_key(desc):
         r"(ASTT12150H)",
         r"(LPTT121[25]0H)",
         r"(UCTT24066)",
+        r"(\d{2}AP\d{3}(?:TT)?)",   # AMP 48AP180TT, 48AP250TT
         r"(ILT[TJ]\d{5})",
         r"BOOSTCHARGE(BC\d{5}(?:ST)?)",
         r"((?:PC|RC|EC|SC|LM|TC|TZ|NEO)\d{5}(?:STJ|TJ|ST|TT)?)",
-        # solar / other families: LPTT12135H, LPTT12150L, ASTT12150L, LPT1240H, UCTT25066, ILST12042, AB18060 ...
-        r"((?:LPTT|ASTT|LPT|UCTT|ILST|BC|AP|AB)\d{4,5}(?:STJ|TJ|ST|TT|H|L)?)",
-        r"(?<!\d)([2-5]\d{3}(?:STJ|TT|ST))",
+        # solar / other families: LPTT12135H, LPTT12150L, ASTT12150L, LPT1240H, UCTT25066, ILST12042, IGSTJ18000, AB18060 ...
+        r"((?:LPTT|ASTT|LPT|UCTT|ILST|IGSTJ|BC|AP|AB)\d{4,5}(?:STJ|TJ|ST|TT|H|L)?)",
+        r"(?<!\d)([1-5]\d{3}(?:STJ|TT|ST))",   # 4-digit Amaze: 1036ST, 2042TT, 2048STJ ...
         r"(ECOCHRG\d{5})",
     ]:
         m = re.search(pat, s)
         if m:
-            key = re.sub(r"^(\d{4})ST$", r"\1STJ", m.group(1))
-            key = re.sub(r"^ECOCHRG", "ECO", key)   # Eco Charge 18000 is written ECO18000 on the sheet   # 4-digit Amaze ST = STJ, as on the sheet (reconcile.normalize)
+            key = re.sub(r"^(\d{4})ST$", r"\1STJ", m.group(1))   # 4-digit Amaze ST = STJ, as on the sheet (reconcile.normalize)
+            key = re.sub(r"^ECOCHRG", "ECO", key)   # Eco Charge 18000 is written ECO18000 on the sheet
+            pro = pro or s[m.end():] == "P"   # a model written sheet-style with Pro as a trailing P (PC18054TJP)
             return key + ("P" if pro else "")
     return s
 

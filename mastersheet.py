@@ -130,18 +130,29 @@ def _letter(i):
     return s
 
 
+def _model_of(desc):
+    """Model of a hand-added row: a full description goes through model_key; a model written the way the
+    loading sheet writes it ("2260TT", "RC 18000 ST Pro", "BC 16048 ST") is read like a sheet row."""
+    from reconcile import normalize
+    key = model_key(desc)
+    return key if key != desc.upper().replace(" ", "") else normalize(desc)
+
+
 def _build(table, h, cols, sheet, notes=()):
     ci, di, ki = cols
     rows, by_code, problems = [], {}, list(notes)
     for n, r in enumerate(table[h + 1:], start=h + 2):
         get = lambda i: r[i] if i < len(r) else None
         code = _norm_code(get(ci))
-        if not code:
-            continue
         desc = " ".join(str(get(di) or "").split())
+        if not code and not desc:
+            continue
         kg = _num(get(ki))
         if kg is None or kg <= 0:
-            problems.append(f"Row {n}: {code} has no valid weight ({get(ki)!r}) - skipped")
+            problems.append(f"Row {n}: {code or desc} has no valid weight ({get(ki)!r}) - skipped")
+            continue
+        if not code:   # a model added by hand without an item code (e.g. "48AP180TT", "ILTT 18060 PRO"): used by model
+            rows.append({"row": n, "code": "", "desc": desc, "kg": kg, "model": _model_of(desc)})
             continue
         key = code_key(code)
         if key in by_code:

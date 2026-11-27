@@ -59,7 +59,9 @@ and produces an Excel reconciliation report.
 Rate/Kg), loaded vs invoiced in pieces, kg and Rs with the difference, and the model-wise annexure (loaded
 and invoiced pcs, kg/pc, loaded kg, invoiced kg, difference, remark). The combined PDF opens with it.
 
-Models are read from descriptions by family (PC, RC, EC, SC, LM, TC, TZ, BC, NEO, ILTT/ILTJ, LPTT, ASTT, LPT,
+Mastersheet rows without an item code (models added by hand, e.g. "48AP180TT", "ILTT 18060 PRO") are used by model.
+
+Models are read from descriptions by family (PC, RC, EC, SC, LM, TC, TZ, BC, NEO, ILTT/ILTJ, LPTT, ASTT, LPT, IGSTJ, 48AP,
 UCTT, AP, AB, 4-digit Amaze TT/STJ ...), so solar models such as LPTT12150L, LPTT12135H or LPT1240H find
 their master weight and match the sheet. A model not in the master and not billed borrows the invoice rate
 of a billed model with the same number (Pro with Pro first: TZ15060STJ -> TC15060, RC26000 -> RC26000P).
