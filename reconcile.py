@@ -43,6 +43,40 @@ def suggest(key, candidates):
     return best[1] if best[0] >= SUGGEST_SCORE else ""
 
 
+def _number(m):
+    d = re.search(r"\d{3,5}", m)
+    return d.group() if d else None
+
+
+def alternatives(key, sheet_qty, spare):
+    """For a loading-sheet model that is not on the invoice: the invoice models it most likely is, so the page
+    can offer them as one-click fixes (never applied by itself). spare: {invoice model: pcs billed but not
+    on the sheet}. Same model number first (ILTT12150HL -> LPTT12150H / LPTT12150L, BC18048 -> BC18048ST),
+    Pro with Pro preferred, then the closest spelling. Also a split when two or three of them add up exactly
+    to the sheet quantity (93 = LPTT12150H 49 + LPTT12150L 44)."""
+    num, pro = _number(key), key.endswith("P")
+    scored = []
+    for c, q in spare.items():
+        if q <= 0 or c == key:
+            continue
+        same = num is not None and _number(c) == num
+        r = fuzz.ratio(key, c)
+        if same or r >= 70:
+            scored.append((same, c.endswith("P") == pro, r, q, c))
+    scored.sort(reverse=True)
+    picks = [{"model": c, "qty": spare[c]} for *_, c in scored[:4]]
+    split = []
+    from itertools import combinations
+    for n in (2, 3):
+        for combo in combinations(picks, n):
+            if sum(p["qty"] for p in combo) == sheet_qty:
+                split = [dict(p) for p in combo]
+                break
+        if split:
+            break
+    return picks[:3], split
+
+
 def refs(lines, multi):
     """Invoice Sr. Nos, grouped by invoice when the load has several invoices."""
     if not multi:
@@ -75,14 +109,19 @@ def reconcile(sheet, inv):
     unmatched_inv = [k for k in agg if k not in sheet_by_key]
     unmatched_sheet = [k for k in sheet_by_key if k not in agg]
 
+    # invoice pcs not accounted for on the sheet, per model: what a misread sheet row could really be
+    spare = {k: a["qty"] - sum(r["qty"] for r in sheet_by_key.get(k, [])) for k, a in agg.items()}
+
     def row(key, sheet_rows):
         a = agg.get(key)
         sq = sum(r["qty"] for r in sheet_rows)
+        alts, split = [], []
         iq = a["qty"] if a else 0
         if not sheet_rows:
             status, hint = "NOT IN SHEET", suggest(key, unmatched_sheet)
         elif not a:
             status, hint = "NOT IN INVOICE", suggest(key, unmatched_inv)
+            alts, split = alternatives(key, sq, spare)
         else:
             status, hint = ("OK" if iq == sq else "QTY MISMATCH"), ""
         written = ", ".join(dict.fromkeys(r["model"] for r in sheet_rows))
@@ -95,6 +134,7 @@ def reconcile(sheet, inv):
             # blue: the sheet text was corrected to reach this model (e.g. ILTO18148 read as ILTJ18148)
             "check": bool(sheet_rows) and any(re.sub(r"[^A-Z0-9]", "", r["model"].upper()) != key for r in sheet_rows),
             "suggest": hint,
+            "alternatives": alts if sheet_rows and not a else [], "split": split if sheet_rows and not a else [],
             "invoices": ", ".join(dict.fromkeys(no for no, _ in a["lines"])) if a else "",
             "invoice_lines": refs(a["lines"], multi) if a else "",
             "item_codes": ", ".join(sorted(a["codes"])) if a else "",

@@ -66,6 +66,12 @@ UCTT, AP, AB, 4-digit Amaze TT/STJ ...), so solar models such as LPTT12150L, LPT
 their master weight and match the sheet. A model not in the master and not billed borrows the invoice rate
 of a billed model with the same number (Pro with Pro first: TZ15060STJ -> TC15060, RC26000 -> RC26000P).
 
+**Please check these rows**: after each check, every loading-sheet model that is not on the invoice is listed at
+the top of the result in plain words, with one-click fixes taken from the invoice pcs not yet accounted for -
+same model number first (ILTT12150HL -> LPTT12150H, BC18048 -> BC18048ST), then the closest spelling, and a
+*Split* when two or three invoice models add up exactly to the sheet quantity. A click corrects the sheet row
+and checks again (no credits, no new download). Nothing is ever changed without a click.
+
 Every table on the page - the loading sheet, Loading sheet vs invoices, Check 1 (unit price, line by
 line) and Check 2 (quantity in kg) - has **Excel** and **PDF** buttons. They export exactly what the
 table shows (filter and search applied, noted in the file), with the load details, whole-number kg and

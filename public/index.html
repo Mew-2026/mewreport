@@ -326,6 +326,18 @@
   .rm { display: inline-flex; align-items: center; height: 22px; margin-left: 6px; padding: 0 8px; border: 1px dashed var(--line2); border-radius: 99px;
         background: transparent; color: var(--muted); font: 600 11px Inter, system-ui, sans-serif; cursor: pointer; vertical-align: middle; }
   .rm:hover { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
+  /* "please check these rows": sheet models not on the invoice, with one-click fixes */
+  .fixpanel { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: var(--radius);
+              box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 16px; animation: rise .35s ease both; }
+  .fixpanel[hidden] { display: none; }
+  .fixpanel .fp-h { font-size: 15px; font-weight: 800; margin-bottom: 2px; }
+  .fixpanel .fp-sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .fitem { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border: 1px solid var(--line);
+           border-radius: 12px; background: var(--card2); margin-top: 8px; }
+  .fitem .ft { flex: 1 1 260px; min-width: 0; font-size: 14px; }
+  .fitem .ft b { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .fitem .fa { display: flex; flex-wrap: wrap; gap: 6px; }
+  .fitem .none { color: var(--muted); font-size: 13px; }
   /* manual matches panel: every group with its rows, net and an Ungroup button */
   .gpanel { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--man); border-radius: var(--radius);
             box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 16px; animation: rise .35s ease both; }
@@ -584,6 +596,7 @@
       <div class="dl"><a class="btn sm" id="dl" download>⬇ Excel report</a></div>
     </div>
     <div class="stats" id="stats"></div>
+    <section class="fixpanel" id="fixpanel" hidden aria-label="Rows to check"></section>
     <section class="gpanel" id="gpanel" hidden aria-label="Manual matches">
       <div class="gp-h"><div><b>Manual matches</b><span id="gp-count"></span></div>
         <button type="button" class="btn sm ghost" id="gp-all">Ungroup all</button></div>
@@ -1048,17 +1061,61 @@ $("f").addEventListener("submit", async e => {
     if (weightReady()) { say("Checking weights and rates…"); await runWeight(); }
     else { rc = null; $("result2").classList.remove("show"); }
     setCollapsed(true); showTab("result"); syncTabs();
-    if (rc) $("dlx2").click(); else download();   // the fullest report downloads once per run
+    const quiet = quietRun;
+    if (!quiet) { if (rc) $("dlx2").click(); else download(); }   // the fullest report downloads once per run (not after a quick fix)
+    quietRun = false;
     $("results-area").scrollIntoView({ behavior: "smooth" });
     const dup = data.duplicates.length ? `Skipped duplicate invoice: ${data.duplicates.join(", ")}. ` : "";
-    say(dup + (rc ? "Done — both tabs ready; combined Excel downloaded." : "Done — Excel report downloaded. Add the mastersheet and today's rate, then Run check again for the weight check."));
+    say(dup + (quiet ? "Fixed and checked again — the reports above are up to date." : rc ? "Done — both tabs ready; combined Excel downloaded." : "Done — Excel report downloaded. Add the mastersheet and today's rate, then Run check again for the weight check."));
   } catch (err) {
     say(err.message, true);
   } finally { busy(1, false); }
 });
 
+// ---------------- "please check these rows": loading-sheet models that are not on the invoice, with one-click fixes
+function sheetRowsOf(r) {   // the editor rows behind a result row (its sheet line numbers count non-empty rows)
+  const filled = sheet.rows.filter(x => x.model || x.qty);
+  return String(r.sheet_lines || "").split(",").map(n => filled[Number(n) - 1]).filter(Boolean);
+}
+function fixPanel() {
+  const todo = data.rows.map((r, i) => ({ r, i })).filter(({ r }) => r.status === "NOT IN INVOICE" && !r.group);
+  $("fixpanel").hidden = !todo.length;
+  if (!todo.length) return;
+  $("fixpanel").innerHTML = `<div class="fp-h">⚠ Please check ${todo.length} loading-sheet row${todo.length > 1 ? "s" : ""}</div>
+    <div class="fp-sub">These models are written on the loading sheet but are not on the invoice — usually a spelling or a missing letter. Click the right model to fix the sheet and check again (free).</div>` +
+    todo.map(({ r, i }) => {
+      const alts = r.alternatives || [], split = r.split || [];
+      const one = sheetRowsOf(r).length === 1;
+      const btns = [
+        ...(split.length && one ? [`<button type="button" class="btn sm" data-fix="split" data-i="${i}">Split into ${split.map(p => `${esc(p.model)} × ${p.qty}`).join(" + ")}</button>`] : []),
+        ...alts.map((a, k) => `<button type="button" class="btn sm ${split.length ? "ghost" : ""}" data-fix="use" data-i="${i}" data-k="${k}">Use ${esc(a.model)} <small>(${a.qty} on invoice)</small></button>`),
+      ];
+      return `<div class="fitem"><div class="ft">Sheet line ${esc(r.sheet_lines)}: <b>${esc(r.sheet_model)}</b> × ${r.sheet_qty} is not on the invoice.</div>
+        <div class="fa">${btns.length ? btns.join("") : `<span class="none">No similar model on the invoice — check the photo, or leave it (it stays as "not in invoice").</span>`}</div></div>`;
+    }).join("");
+}
+$("fixpanel").addEventListener("click", e => {
+  const b = e.target.closest("button[data-fix]");
+  if (!b) return;
+  const r = data.rows[Number(b.dataset.i)], rows = sheetRowsOf(r);
+  if (!rows.length) return;
+  if (b.dataset.fix === "use") {
+    const m = r.alternatives[Number(b.dataset.k)].model;
+    rows.forEach(x => { x.model = m; });
+    say(`Sheet line ${r.sheet_lines}: ${r.sheet_model} changed to ${m} — checking again…`);
+  } else {   // split one sheet row into the invoice models whose pcs add up to it
+    const [first, ...rest] = r.split, x = rows[0], at = sheet.rows.indexOf(x);
+    x.model = first.model; x.qty = first.qty;
+    sheet.rows.splice(at + 1, 0, ...rest.map(p => ({ model: p.model, qty: p.qty, sheet_row: x.sheet_row })));
+    say(`Sheet line ${r.sheet_lines}: ${r.sheet_model} split into ${r.split.map(p => `${p.model} × ${p.qty}`).join(" + ")} — checking again…`);
+  }
+  drawRows();
+  quietRun = true;
+  $("f").requestSubmit();   // re-run with the corrected sheet (invoices are not read again, no credits)
+});
+
 // ---------------- manual matching: tick incorrect rows anywhere, group them; the server recomputes the report
-let groups = [], lastCheck = null;
+let groups = [], lastCheck = null, quietRun = false;
 const picked = new Set();   // indexes into data.rows
 const PILL = { CORRECT: "OK", INCORRECT: "BAD", MATCHED: "MAN", "PARTLY MATCHED": "PART" };
 const ROWCLS = { CORRECT: "good-row", INCORRECT: "bad-row", MATCHED: "man-row", "PARTLY MATCHED": "part-row" };
@@ -1180,6 +1237,7 @@ function render(animate = true) {
     $("stats").querySelectorAll("b[data-v]").forEach(countUp);
   }
   groupsPanel();
+  fixPanel();
   const tabs = [["ALL", "All", d.rows.length], ["INCORRECT", "Incorrect", count("INCORRECT")],
     ["PARTLY MATCHED", "Partly", part], ["MATCHED", "Matched", man], ["CORRECT", "Correct", count("CORRECT")]]
     .filter(([k, , n]) => n || ["ALL", "INCORRECT", "CORRECT"].includes(k) || k === filter);

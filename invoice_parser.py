@@ -50,6 +50,12 @@ def model_key(desc):
             key = re.sub(r"^ECOCHRG", "ECO", key)   # Eco Charge 18000 is written ECO18000 on the sheet
             pro = pro or s[m.end():] == "P"   # a model written sheet-style with Pro as a trailing P (PC18054TJP)
             return key + ("P" if pro else "")
+    # a family not listed above: letters + 4-5 digit model number (+ ST/TT/H/L ...), once capacity tokens
+    # like 12V150AH are taken out, so a new model still reads as a short name ("XYZ18060") on every side
+    t = re.sub(r"\d{1,2}V\d{2,3}AH", " ", s)
+    m = re.search(r"(?<![A-Z])([A-Z]{2,5}\d{4,5}(?:STJ|TJ|ST|TT|H|L)?)(?![0-9])", t)
+    if m and not re.match(r"^(SF|ST|SCR|LUM|BTY|FNSD)", m.group(1)):
+        return m.group(1) + ("P" if pro or t[m.end():] == "P" else "")
     return s
 
 
