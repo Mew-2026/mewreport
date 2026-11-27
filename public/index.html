@@ -456,6 +456,31 @@
   footer { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 20px 16px 32px; border-top: 1px solid var(--line); }
   footer img { width: 20px; height: 20px; }
 
+  /* ============ hover (same feel as Freight Register): tiles lift, tilt toward the pointer, get an accent
+     ring + soft glow and a spotlight that follows the pointer. --rx/--ry/--mx/--my are set by the script. */
+  .stat, .drop, .fitem, .gitem {
+    --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 50%; --hc: var(--c, var(--accent));
+    position: relative; isolation: isolate; animation-fill-mode: backwards;   /* entry animation must not pin the transform */
+    transition: transform .28s cubic-bezier(.2, .8, .2, 1), box-shadow .28s ease, border-color .2s ease, background .2s ease; }
+  .stat::after, .drop::after, .fitem::after, .gitem::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1; opacity: 0; transition: opacity .25s ease;
+    background: radial-gradient(240px circle at var(--mx) var(--my), color-mix(in srgb, var(--hc) 18%, transparent), transparent 62%); }
+  .stat:hover, .drop:hover, .drop.over, .fitem:hover, .gitem:hover {
+    z-index: 2; border-color: var(--hc); border-style: solid;
+    transform: perspective(800px) rotateX(var(--rx)) rotateY(var(--ry)) translateY(-3px) scale(1.03);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--hc) 24%, transparent), 0 18px 40px -10px color-mix(in srgb, var(--hc) 55%, transparent); }
+  .fitem:hover, .gitem:hover { transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) translateY(-2px) scale(1.01); }   /* wide rows: gentler */
+  .stat:hover::after, .drop:hover::after, .drop.over::after, .fitem:hover::after, .gitem:hover::after { opacity: 1; }
+  .drop:hover .ico, .drop.over .ico { transform: translateY(-2px) scale(1.06); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .btn:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent), 0 10px 24px -6px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .btn.ghost:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow); }
+  tbody tr { transition: background .15s ease, box-shadow .15s ease; }
+  tbody tr:hover { box-shadow: inset 3px 0 0 var(--accent); }
+  .tabbar button, .filters button { transition: background .2s ease, color .2s ease, box-shadow .2s ease, transform .2s ease; }
+  .tabbar button:hover:not(:disabled):not([aria-selected="true"]) { transform: translateY(-1px); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
+  @media (prefers-reduced-motion: reduce), (hover: none) {
+    .stat:hover, .drop:hover, .drop.over, .fitem:hover, .gitem:hover { transform: none; }
+  }
   @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   @keyframes pop { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
   @keyframes fadeRow { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -665,6 +690,25 @@
 <footer><img src="logo.svg" alt="">Mahesh Engineering Works · B-33 Bela Industrial Area, Phase 2, Muzaffarpur</footer>
 
 <script>
+// hover tilt + spotlight for tiles (CSS reads --rx/--ry/--mx/--my); off for touch screens and reduced motion
+(() => {
+  if (!matchMedia("(hover: hover) and (pointer: fine)").matches || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const SEL = ".stat, .drop, .fitem, .gitem", MAX = 6;   // degrees of tilt at the edges
+  let cur = null;
+  const reset = el => { for (const v of ["--rx", "--ry", "--mx", "--my"]) el.style.removeProperty(v); };
+  document.addEventListener("pointermove", e => {
+    const el = e.target.closest ? e.target.closest(SEL) : null;
+    if (cur && cur !== el) { reset(cur); cur = null; }
+    if (!el) return;
+    cur = el;
+    const r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    el.style.setProperty("--mx", `${(x * 100).toFixed(1)}%`);
+    el.style.setProperty("--my", `${(y * 100).toFixed(1)}%`);
+    el.style.setProperty("--ry", `${((x - .5) * 2 * MAX).toFixed(2)}deg`);
+    el.style.setProperty("--rx", `${((.5 - y) * 2 * MAX).toFixed(2)}deg`);
+  }, { passive: true });
+  document.addEventListener("pointerleave", () => { if (cur) { reset(cur); cur = null; } });
+})();
 const $ = id => document.getElementById(id);
 // sticky table headers sit just under the sticky page header
 const setHdr = () => document.documentElement.style.setProperty("--hdr", document.querySelector("header.top").offsetHeight + "px");
