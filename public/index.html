@@ -136,7 +136,7 @@
          background: color-mix(in srgb, var(--accent) 12%, transparent); transition: background .2s; }
   .fmt:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
   .drop[hidden] { display: none; }
-  .drop.swap { animation: pop .3s ease both; }
+  .drop.swap { animation: pop .3s ease backwards; }   /* backwards: the pop must not pin the transform, or the hover tilt stops working */
   @media (max-width: 640px) { .pair { grid-template-columns: 1fr; } }
 
   /* ============ drop zones (the real file input covers the zone: click, keyboard and drag-drop all work) */
